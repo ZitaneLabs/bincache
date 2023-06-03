@@ -1,0 +1,9 @@
+[package]
+name = "bincache"
+version = "0.1.0"
+edition = "2021"
+description = "ZitaneLabs binary cache."
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
