@@ -3,7 +3,7 @@ use std::hash::Hash;
 use super::Error;
 
 use crate::cache::Cache;
-use crate::traits::CacheStrategy;
+use crate::traits::{CacheKey, CacheStrategy};
 use crate::Result;
 
 /// A builder for creating a new [Cache].
@@ -54,7 +54,7 @@ where
     /// Build the [Cache].
     pub fn build<K>(self) -> Result<Cache<K, S>>
     where
-        K: Eq + Hash,
+        K: CacheKey + Eq + Hash,
     {
         Ok(Cache::new(self.strategy.ok_or(Error::NoStrategy)?))
     }

@@ -8,6 +8,8 @@ pub enum Error {
     KeyNotFound,
     #[error("Cache limit exceeded: {limit_kind}")]
     LimitExceeded { limit_kind: Cow<'static, str> },
+    #[error("I/O error: {0}")]
+    IoError(#[from] std::io::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

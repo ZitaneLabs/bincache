@@ -43,7 +43,7 @@
 //!
 //! ## License
 //!
-//! This project is licensed under MIT license.
+//! bincache is licensed under the MIT license.
 //!
 //! Happy coding with `bincache`!
 //!
@@ -58,6 +58,7 @@ mod traits;
 pub(crate) use error::Result;
 
 reexport_strategy!(Memory);
+reexport_strategy!(Disk);
 
 // Export basic types
 pub use builder::CacheBuilder;
