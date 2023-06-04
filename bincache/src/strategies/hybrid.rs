@@ -1,7 +1,9 @@
-use std::borrow::Cow;
-use std::io::Read;
-use std::path::{Path, PathBuf};
-use std::{fs::File, io::Write};
+use std::{
+    borrow::Cow,
+    fs::File,
+    io::{Read, Write},
+    path::{Path, PathBuf},
+};
 
 use crate::{
     traits::{CacheKey, CacheStrategy},
@@ -63,6 +65,14 @@ pub struct Limits {
 }
 
 impl Limits {
+    pub fn new(byte_limit: Option<usize>, entry_limit: Option<usize>) -> Self {
+        Self {
+            byte_limit,
+            entry_limit,
+            ..Default::default()
+        }
+    }
+
     fn evaluate(&self, size: usize) -> LimitEvaluation {
         if let Some(byte_limit) = self.byte_limit {
             if self.current_byte_count + size > byte_limit {
@@ -92,6 +102,18 @@ pub struct Hybrid {
 }
 
 impl Hybrid {
+    pub fn new<'a>(
+        cache_dir: impl Into<Cow<'a, Path>>,
+        memory_limits: Limits,
+        disk_limits: Limits,
+    ) -> Self {
+        Self {
+            cache_dir: cache_dir.into().into_owned(),
+            memory_limits,
+            disk_limits,
+        }
+    }
+
     fn read_from_disk(&self, entry: &DiskEntry) -> Result<Vec<u8>> {
         let mut file = File::open(&entry.path)?;
         let mut buf = Vec::with_capacity(entry.byte_len);
@@ -204,5 +226,164 @@ impl CacheStrategy for Hybrid {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::metadata;
+
+    use super::{Hybrid, Limits, LIMIT_KIND_BYTE_DISK, LIMIT_KIND_ENTRY_DISK};
+    use crate::{test_utils::TempDir, Cache, Error};
+
+    #[test]
+    fn test_default_strategy() {
+        // We don't need a temp dir here, because we don't write to disk
+        let mut cache = Cache::new(Hybrid::default());
+
+        cache.put("foo", b"foo".to_vec()).unwrap();
+
+        assert_eq!(cache.strategy().memory_limits.current_byte_count, 3);
+        assert_eq!(cache.strategy().memory_limits.current_entry_count, 1);
+        assert_eq!(cache.strategy().disk_limits.current_byte_count, 0);
+        assert_eq!(cache.strategy().disk_limits.current_entry_count, 0);
+
+        cache.put("bar", b"bar".to_vec()).unwrap();
+
+        assert_eq!(cache.strategy().memory_limits.current_byte_count, 6);
+        assert_eq!(cache.strategy().memory_limits.current_entry_count, 2);
+        assert_eq!(cache.strategy().disk_limits.current_byte_count, 0);
+        assert_eq!(cache.strategy().disk_limits.current_entry_count, 0);
+
+        assert_eq!(cache.get("foo").unwrap(), b"foo".as_slice());
+        assert_eq!(cache.get("bar").unwrap(), b"bar".as_slice());
+
+        assert!(cache.get("baz").is_err());
+
+        cache.delete("foo").unwrap();
+
+        assert_eq!(cache.strategy().memory_limits.current_byte_count, 3);
+        assert_eq!(cache.strategy().memory_limits.current_entry_count, 1);
+        assert_eq!(cache.strategy().disk_limits.current_byte_count, 0);
+        assert_eq!(cache.strategy().disk_limits.current_entry_count, 0);
+
+        cache.delete("bar").unwrap();
+
+        assert_eq!(cache.strategy().memory_limits.current_byte_count, 0);
+        assert_eq!(cache.strategy().memory_limits.current_entry_count, 0);
+        assert_eq!(cache.strategy().disk_limits.current_byte_count, 0);
+        assert_eq!(cache.strategy().disk_limits.current_entry_count, 0);
+    }
+
+    #[test]
+    fn test_strategy_with_memory_byte_limit() {
+        let temp_dir = TempDir::new();
+
+        let mut cache = Cache::new(Hybrid::new(
+            temp_dir.as_ref(),
+            Limits::new(Some(6), None),
+            Limits::default(),
+        ));
+
+        cache.put("foo", b"foo".to_vec()).unwrap();
+        cache.put("bar", b"bar".to_vec()).unwrap();
+
+        assert_eq!(cache.get("foo").unwrap(), b"foo".as_slice());
+        assert_eq!(cache.get("bar").unwrap(), b"bar".as_slice());
+
+        cache.put("baz", b"baz".to_vec()).unwrap();
+
+        assert!(metadata(temp_dir.as_ref().join("baz")).unwrap().is_file());
+    }
+
+    #[test]
+    fn test_strategy_with_memory_entry_limit() {
+        let temp_dir = TempDir::new();
+
+        let mut cache = Cache::new(Hybrid::new(
+            temp_dir.as_ref(),
+            Limits::new(None, Some(2)),
+            Limits::default(),
+        ));
+
+        cache.put("foo", b"foo".to_vec()).unwrap();
+        cache.put("bar", b"bar".to_vec()).unwrap();
+
+        assert_eq!(cache.get("foo").unwrap(), b"foo".as_slice());
+        assert_eq!(cache.get("bar").unwrap(), b"bar".as_slice());
+
+        cache.put("baz", b"baz".to_vec()).unwrap();
+
+        assert!(metadata(temp_dir.as_ref().join("baz")).unwrap().is_file());
+    }
+
+    #[test]
+    fn test_strategy_with_memory_and_disk_byte_limit() {
+        let temp_dir = TempDir::new();
+
+        let mut cache = Cache::new(Hybrid::new(
+            temp_dir.as_ref(),
+            Limits::new(Some(6), None),
+            Limits::new(Some(6), None),
+        ));
+
+        cache.put("foo", b"foo".to_vec()).unwrap();
+        cache.put("bar", b"bar".to_vec()).unwrap();
+
+        assert_eq!(cache.get("foo").unwrap(), b"foo".as_slice());
+        assert_eq!(cache.get("bar").unwrap(), b"bar".as_slice());
+
+        cache.put("baz", b"baz".to_vec()).unwrap();
+        cache.put("bax", b"bax".to_vec()).unwrap();
+
+        assert!(metadata(temp_dir.as_ref().join("baz")).unwrap().is_file());
+        assert!(metadata(temp_dir.as_ref().join("bax")).unwrap().is_file());
+
+        match cache.put("quix", b"quix".to_vec()) {
+            Err(err) => match err {
+                Error::LimitExceeded { limit_kind } => {
+                    assert_eq!(limit_kind, LIMIT_KIND_BYTE_DISK);
+                }
+                _ => {
+                    panic!("Unexpected error: {:?}", err);
+                }
+            },
+            _ => (),
+        }
+    }
+
+    #[test]
+    fn test_strategy_with_memory_and_disk_entry_limit() {
+        let temp_dir = TempDir::new();
+
+        let mut cache = Cache::new(Hybrid::new(
+            temp_dir.as_ref(),
+            Limits::new(None, Some(2)),
+            Limits::new(None, Some(2)),
+        ));
+
+        cache.put("foo", b"foo".to_vec()).unwrap();
+        cache.put("bar", b"bar".to_vec()).unwrap();
+
+        assert_eq!(cache.get("foo").unwrap(), b"foo".as_slice());
+        assert_eq!(cache.get("bar").unwrap(), b"bar".as_slice());
+
+        cache.put("baz", b"baz".to_vec()).unwrap();
+        cache.put("bax", b"bax".to_vec()).unwrap();
+
+        assert!(metadata(temp_dir.as_ref().join("baz")).unwrap().is_file());
+        assert!(metadata(temp_dir.as_ref().join("bax")).unwrap().is_file());
+
+        match cache.put("quix", b"quix".to_vec()) {
+            Err(err) => match err {
+                Error::LimitExceeded { limit_kind } => {
+                    assert_eq!(limit_kind, LIMIT_KIND_ENTRY_DISK);
+                }
+                _ => {
+                    panic!("Unexpected error: {:?}", err);
+                }
+            },
+            _ => (),
+        }
     }
 }

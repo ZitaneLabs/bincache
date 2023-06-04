@@ -1,7 +1,9 @@
-use std::borrow::Cow;
-use std::io::Read;
-use std::path::{Path, PathBuf};
-use std::{fs::File, io::Write};
+use std::{
+    borrow::Cow,
+    fs::File,
+    io::{Read, Write},
+    path::{Path, PathBuf},
+};
 
 use crate::{
     traits::{CacheKey, CacheStrategy},
@@ -36,8 +38,13 @@ pub struct Disk {
 
 impl Disk {
     /// Create a new disk cache strategy.
-    pub fn new(byte_limit: Option<usize>, entry_limit: Option<usize>) -> Self {
+    pub fn new<'a>(
+        cache_dir: impl Into<Cow<'a, Path>>,
+        byte_limit: Option<usize>,
+        entry_limit: Option<usize>,
+    ) -> Self {
         Self {
+            cache_dir: cache_dir.into().into_owned(),
             byte_limit,
             entry_limit,
             ..Default::default()
@@ -119,5 +126,94 @@ impl CacheStrategy for Disk {
         self.current_entry_count -= 1;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Disk, LIMIT_KIND_BYTE, LIMIT_KIND_ENTRY};
+    use crate::{test_utils::TempDir, Cache, Error};
+
+    #[test]
+    fn test_default() {
+        let temp_dir = TempDir::new();
+        let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None));
+
+        cache.put("foo", b"foo".to_vec()).unwrap();
+
+        assert_eq!(cache.strategy().current_byte_count, 3);
+        assert_eq!(cache.strategy().current_entry_count, 1);
+
+        cache.put("bar", b"bar".to_vec()).unwrap();
+
+        assert_eq!(cache.strategy().current_byte_count, 6);
+        assert_eq!(cache.strategy().current_entry_count, 2);
+
+        assert_eq!(cache.get("foo").unwrap(), b"foo".as_slice());
+        assert_eq!(cache.get("bar").unwrap(), b"bar".as_slice());
+
+        assert!(cache.get("baz").is_err());
+
+        cache.delete("foo").unwrap();
+
+        assert_eq!(cache.strategy().current_byte_count, 3);
+        assert_eq!(cache.strategy().current_entry_count, 1);
+
+        cache.delete("bar").unwrap();
+
+        assert_eq!(cache.strategy().current_byte_count, 0);
+        assert_eq!(cache.strategy().current_entry_count, 0);
+    }
+
+    #[test]
+    fn test_strategy_with_byte_limit() {
+        let temp_dir = TempDir::new();
+        let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), Some(6), None));
+
+        let foo_data = b"foo".to_vec();
+        let bar_data = b"bar".to_vec();
+        let baz_data = b"baz".to_vec();
+
+        assert_eq!(foo_data.len(), 3);
+        assert_eq!(bar_data.len(), 3);
+        assert_eq!(baz_data.len(), 3);
+
+        cache.put("foo", foo_data.clone()).unwrap();
+        cache.put("bar", bar_data.clone()).unwrap();
+
+        assert_eq!(cache.get("foo").unwrap(), foo_data.as_slice());
+        assert_eq!(cache.get("bar").unwrap(), bar_data.as_slice());
+
+        match cache.put("baz", baz_data) {
+            Err(err) => match err {
+                Error::LimitExceeded { limit_kind } => {
+                    assert_eq!(limit_kind, LIMIT_KIND_BYTE);
+                }
+                _ => panic!("Unexpected error: {:?}", err),
+            },
+            _ => (),
+        }
+    }
+
+    #[test]
+    fn test_strategy_with_entry_limit() {
+        let temp_dir = TempDir::new();
+        let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, Some(3)));
+
+        cache.put("foo", b"foo".to_vec()).unwrap();
+        cache.put("bar", b"bar".to_vec()).unwrap();
+
+        assert_eq!(cache.get("foo").unwrap(), b"foo".as_slice());
+        assert_eq!(cache.get("bar").unwrap(), b"bar".as_slice());
+
+        match cache.put("baz", b"baz".to_vec()) {
+            Err(err) => match err {
+                Error::LimitExceeded { limit_kind } => {
+                    assert_eq!(limit_kind, LIMIT_KIND_ENTRY);
+                }
+                _ => panic!("Unexpected error: {:?}", err),
+            },
+            _ => (),
+        }
     }
 }

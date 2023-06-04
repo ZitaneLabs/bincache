@@ -9,3 +9,6 @@ description = "ZitaneLabs binary cache."
 [dependencies]
 paste = "1.0.12"
 thiserror = "1.0.40"
+
+[dev-dependencies]
+uuid = { version = "1.3.3", features = ["v4"] }

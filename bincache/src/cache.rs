@@ -53,4 +53,10 @@ where
         let entry = self.data.remove(&key).ok_or(crate::Error::KeyNotFound)?;
         self.strategy.delete(entry)
     }
+
+    // Internal API
+
+    pub(crate) fn strategy(&self) -> &S {
+        &self.strategy
+    }
 }

@@ -48,6 +48,9 @@
 //! Happy coding with `bincache`!
 //!
 
+#[cfg(test)]
+mod test_utils;
+
 mod builder;
 mod cache;
 mod error;

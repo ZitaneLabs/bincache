@@ -90,3 +90,81 @@ impl CacheStrategy for Memory {
         Ok(_ = self.take(entry)?)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Memory, LIMIT_KIND_BYTE, LIMIT_KIND_ENTRY};
+    use crate::{Cache, Error};
+
+    #[test]
+    fn test_default_strategy() {
+        let mut cache = Cache::new(Memory::default());
+
+        cache.put("foo", b"foo".to_vec()).unwrap();
+
+        assert_eq!(cache.strategy().current_byte_count, 3);
+        assert_eq!(cache.strategy().current_entry_count, 1);
+
+        cache.put("bar", b"bar".to_vec()).unwrap();
+
+        assert_eq!(cache.strategy().current_byte_count, 6);
+        assert_eq!(cache.strategy().current_entry_count, 2);
+
+        assert_eq!(cache.get("foo").unwrap(), b"foo".as_slice());
+        assert_eq!(cache.get("bar").unwrap(), b"bar".as_slice());
+
+        assert!(cache.get("baz").is_err());
+
+        cache.delete("foo").unwrap();
+
+        assert_eq!(cache.strategy().current_byte_count, 3);
+        assert_eq!(cache.strategy().current_entry_count, 1);
+
+        cache.delete("bar").unwrap();
+
+        assert_eq!(cache.strategy().current_byte_count, 0);
+        assert_eq!(cache.strategy().current_entry_count, 0);
+    }
+
+    #[test]
+    fn test_strategy_with_byte_limit() {
+        let mut cache = Cache::new(Memory::new(Some(6), None));
+
+        cache.put("foo", b"foo".to_vec()).unwrap();
+        cache.put("bar", b"bar".to_vec()).unwrap();
+
+        assert_eq!(cache.get("foo").unwrap(), b"foo".as_slice());
+        assert_eq!(cache.get("bar").unwrap(), b"bar".as_slice());
+
+        match cache.put("baz", b"baz".to_vec()) {
+            Err(err) => match err {
+                Error::LimitExceeded { limit_kind } => {
+                    assert_eq!(limit_kind, LIMIT_KIND_BYTE);
+                }
+                _ => panic!("Unexpected error: {:?}", err),
+            },
+            _ => (),
+        }
+    }
+
+    #[test]
+    fn test_strategy_with_entry_limit() {
+        let mut cache = Cache::new(Memory::new(None, Some(3)));
+
+        cache.put("foo", b"foo".to_vec()).unwrap();
+        cache.put("bar", b"bar".to_vec()).unwrap();
+
+        assert_eq!(cache.get("foo").unwrap(), b"foo".as_slice());
+        assert_eq!(cache.get("bar").unwrap(), b"bar".as_slice());
+
+        match cache.put("baz", b"baz".to_vec()) {
+            Err(err) => match err {
+                Error::LimitExceeded { limit_kind } => {
+                    assert_eq!(limit_kind, LIMIT_KIND_ENTRY);
+                }
+                _ => panic!("Unexpected error: {:?}", err),
+            },
+            _ => (),
+        }
+    }
+}
