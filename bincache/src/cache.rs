@@ -37,7 +37,7 @@ where
     }
 
     /// Get an entry from the cache.
-    pub fn get(&mut self, key: K) -> Result<Cow<'_, [u8]>> {
+    pub fn get(&self, key: K) -> Result<Cow<'_, [u8]>> {
         let entry = self.data.get(&key).ok_or(crate::Error::KeyNotFound)?;
         self.strategy.get(entry)
     }
