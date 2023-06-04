@@ -57,8 +57,9 @@ mod traits;
 
 pub(crate) use error::Result;
 
-reexport_strategy!(Memory);
 reexport_strategy!(Disk);
+reexport_strategy!(Hybrid);
+reexport_strategy!(Memory);
 
 // Export basic types
 pub use builder::CacheBuilder;
