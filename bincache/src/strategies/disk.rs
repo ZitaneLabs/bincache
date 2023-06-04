@@ -107,7 +107,7 @@ impl CacheStrategy for Disk {
         Ok(Entry { path, byte_len })
     }
 
-    fn get<'a>(&mut self, entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>> {
+    fn get<'a>(&self, entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>> {
         self.read_from_disk(entry).map(Cow::Owned)
     }
 

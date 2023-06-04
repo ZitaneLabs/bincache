@@ -74,7 +74,7 @@ impl CacheStrategy for Memory {
         })
     }
 
-    fn get<'a>(&mut self, entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>> {
+    fn get<'a>(&self, entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>> {
         Ok(entry.data.as_slice().into())
     }
 

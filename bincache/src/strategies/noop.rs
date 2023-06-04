@@ -15,7 +15,7 @@ impl CacheStrategy for Noop {
         Ok(())
     }
 
-    fn get<'a>(&mut self, _entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>> {
+    fn get<'a>(&self, _entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>> {
         Ok(Cow::Borrowed(&[]))
     }
 

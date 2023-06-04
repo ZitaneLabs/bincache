@@ -178,7 +178,7 @@ impl CacheStrategy for Hybrid {
         }
     }
 
-    fn get<'a>(&mut self, entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>> {
+    fn get<'a>(&self, entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>> {
         match entry {
             Entry::Memory(entry) => Ok(Cow::Borrowed(&entry.data)),
             Entry::Disk(entry) => Ok(Cow::Owned(self.read_from_disk(entry)?)),
