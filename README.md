@@ -8,6 +8,9 @@
 [badge_rust]: https://badgers.space/badge/Powered%20by/Rust/orange
 [badge_license]: https://badgers.space/badge/License/MIT
 
+**The library is not yet published to crates.io.**<br>
+The API is not yet stabilized, so expect breaking changes.
+
 ## Features
 
 - Simple API
