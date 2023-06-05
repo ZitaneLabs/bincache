@@ -10,6 +10,15 @@ pub trait CacheStrategy {
     /// It is used to store information about each cached data entry.
     type CacheEntry;
 
+    /// Attempt to recover the cache from a crash.
+    fn recover<K, F>(&mut self, recover_key: F) -> Result<Vec<(K, Self::CacheEntry)>>
+    where
+        F: Fn(&str) -> Option<K>,
+    {
+        _ = recover_key;
+        Ok(vec![])
+    }
+
     /// Put a value into the cache.
     fn put(&mut self, key: &impl CacheKey, value: Vec<u8>) -> Result<Self::CacheEntry>;
 

@@ -1,7 +1,4 @@
-use std::{
-    ops::Deref,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 pub struct TempDir {

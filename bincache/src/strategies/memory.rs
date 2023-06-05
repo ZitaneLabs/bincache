@@ -167,4 +167,21 @@ mod tests {
             _ => (),
         }
     }
+
+    #[test]
+    fn test_recovery() {
+        // populate cache
+        {
+            let mut cache = Cache::new(Memory::default());
+
+            cache.put("foo", b"foo".to_vec()).unwrap();
+            cache.put("bar", b"bar".to_vec()).unwrap();
+        }
+
+        // recover cache
+        {
+            let mut cache = Cache::new(Memory::default());
+            cache.recover(|k| Some(k.to_string())).unwrap();
+        }
+    }
 }

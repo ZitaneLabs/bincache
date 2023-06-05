@@ -29,6 +29,32 @@ where
         }
     }
 
+    /// Recover the cache from a previous state.
+    /// Returns the number of recovered items.
+    ///
+    /// ## When to recover
+    /// Useful after a crash or unplanned restart. It's good practice to call this
+    /// method on startup, but it depends on your specific use case.
+    ///
+    /// ## Disclaimer
+    /// This is a best-effort operation, full recovery is not guaranteed.
+    /// For memory-based caches, no recovery is possible.
+    pub fn recover<F>(&mut self, key_from_str: F) -> Result<usize>
+    where
+        F: Fn(&str) -> Option<K>,
+    {
+        // Recover cache using the strategy
+        let entries = self.strategy.recover(key_from_str)?;
+        let recovered_item_count = entries.len();
+
+        // Insert recovered entries into the cache
+        for (key, entry) in entries {
+            self.data.insert(key, entry);
+        }
+
+        Ok(recovered_item_count)
+    }
+
     /// Put an entry into the cache.
     pub fn put(&mut self, key: K, value: Vec<u8>) -> Result<()> {
         let entry = self.strategy.put(&key, value)?;
@@ -54,8 +80,7 @@ where
         self.strategy.delete(entry)
     }
 
-    // Internal API
-
+    #[cfg(test)]
     pub(crate) fn strategy(&self) -> &S {
         &self.strategy
     }
