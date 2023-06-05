@@ -1,7 +1,7 @@
 # bincache
 > A versatile binary caching library.
 
-![](https://badgers.space/badge/Powered%20by/Rust/black?labelColor=orange&icon=https://www.rust-lang.org/static/images/rust-logo-blk.svg)
+![](https://badgers.space/badge/Powered%20by/Rust/orange)
 ![](https://badgers.space/badge/License/MIT)
 
 ## Features
