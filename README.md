@@ -1,9 +1,9 @@
-# bincache
-> A versatile binary caching library.
-
 ![Backed by Zitane Labs][badge_zitane]
 ![Powered by Rust][badge_rust]
 ![License: MIT][badge_license]
+
+# bincache
+> A versatile binary caching library.
 
 [badge_zitane]: https://badgers.space/badge/Backed%20by/Zitane%20Labs/pink
 [badge_rust]: https://badgers.space/badge/Powered%20by/Rust/orange
