@@ -20,7 +20,11 @@ pub trait CacheStrategy {
     }
 
     /// Put a value into the cache.
-    fn put(&mut self, key: &impl CacheKey, value: Vec<u8>) -> Result<Self::CacheEntry>;
+    fn put<'a>(
+        &mut self,
+        key: &impl CacheKey,
+        value: impl Into<Cow<'a, [u8]>>,
+    ) -> Result<Self::CacheEntry>;
 
     /// Get a value from the cache.
     fn get<'a>(&self, entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>>;

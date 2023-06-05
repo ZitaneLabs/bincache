@@ -11,7 +11,11 @@ pub struct Noop;
 impl CacheStrategy for Noop {
     type CacheEntry = ();
 
-    fn put(&mut self, _key: &impl CacheKey, _value: Vec<u8>) -> Result<Self::CacheEntry> {
+    fn put<'a>(
+        &mut self,
+        _key: &impl CacheKey,
+        _value: impl Into<Cow<'a, [u8]>>,
+    ) -> Result<Self::CacheEntry> {
         Ok(())
     }
 

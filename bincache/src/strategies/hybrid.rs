@@ -192,8 +192,13 @@ impl CacheStrategy for Hybrid {
         Ok(entries)
     }
 
-    fn put(&mut self, key: &impl CacheKey, value: Vec<u8>) -> Result<Self::CacheEntry> {
-        let byte_len = value.len();
+    fn put<'a>(
+        &mut self,
+        key: &impl CacheKey,
+        value: impl Into<Cow<'a, [u8]>>,
+    ) -> Result<Self::CacheEntry> {
+        let value = value.into();
+        let byte_len = value.as_ref().len();
 
         // Evaluate limits
         let fits_into_memory = self.memory_limits.evaluate(byte_len);
@@ -206,7 +211,7 @@ impl CacheStrategy for Hybrid {
             self.memory_limits.current_entry_count += 1;
 
             Ok(Entry::Memory(MemoryEntry {
-                data: value,
+                data: value.into_owned(),
                 byte_len,
             }))
         }

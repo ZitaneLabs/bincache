@@ -43,8 +43,13 @@ impl Memory {
 impl CacheStrategy for Memory {
     type CacheEntry = Entry;
 
-    fn put(&mut self, _key: &impl CacheKey, value: Vec<u8>) -> Result<Self::CacheEntry> {
-        let byte_len = value.len();
+    fn put<'a>(
+        &mut self,
+        _key: &impl CacheKey,
+        value: impl Into<Cow<'a, [u8]>>,
+    ) -> Result<Self::CacheEntry> {
+        let value = value.into();
+        let byte_len = value.as_ref().len();
 
         // Check if the byte limit has been reached.
         if let Some(byte_limit) = self.byte_limit {
@@ -69,7 +74,7 @@ impl CacheStrategy for Memory {
         self.current_entry_count += 1;
 
         Ok(Entry {
-            data: value,
+            data: value.into_owned(),
             byte_len,
         })
     }

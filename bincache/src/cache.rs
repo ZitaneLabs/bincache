@@ -56,7 +56,7 @@ where
     }
 
     /// Put an entry into the cache.
-    pub fn put(&mut self, key: K, value: Vec<u8>) -> Result<()> {
+    pub fn put<'a>(&mut self, key: K, value: impl Into<Cow<'a, [u8]>>) -> Result<()> {
         let entry = self.strategy.put(&key, value)?;
         self.data.insert(key, entry);
         Ok(())

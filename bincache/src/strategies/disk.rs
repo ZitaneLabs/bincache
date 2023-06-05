@@ -131,8 +131,13 @@ impl CacheStrategy for Disk {
         Ok(entries)
     }
 
-    fn put(&mut self, key: &impl CacheKey, value: Vec<u8>) -> Result<Self::CacheEntry> {
-        let byte_len = value.len();
+    fn put<'a>(
+        &mut self,
+        key: &impl CacheKey,
+        value: impl Into<Cow<'a, [u8]>>,
+    ) -> Result<Self::CacheEntry> {
+        let value = value.into();
+        let byte_len = value.as_ref().len();
 
         // Check if the byte limit has been reached.
         if let Some(byte_limit) = self.byte_limit {
@@ -154,7 +159,7 @@ impl CacheStrategy for Disk {
 
         // Write to disk
         let path = self.cache_dir.join(key.to_key());
-        self.write_to_disk(&path, value.as_slice())?;
+        self.write_to_disk(&path, value.as_ref())?;
 
         // Increment limits
         self.current_byte_count += byte_len;
