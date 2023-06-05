@@ -22,7 +22,7 @@ Bincache uses a strategy pattern to allow for different caching strategies:
 ## Usage
 
 1. Add `bincache` to your project:
-    ```
+    ```plain,no_run
     cargo add bincache
     ```
 

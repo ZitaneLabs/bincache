@@ -68,3 +68,8 @@ reexport_strategy!(Memory);
 pub use builder::CacheBuilder;
 pub use cache::Cache;
 pub use error::Error;
+
+// README doctests
+#[doc = include_str!("../../README.md")]
+#[cfg(doctest)]
+pub struct ReadmeDoctests;
