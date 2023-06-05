@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    traits::{CacheKey, CacheStrategy},
+    traits::{CacheKey, CacheStrategy, RecoverableStrategy},
     Result,
 };
 
@@ -62,7 +62,7 @@ impl Disk {
 
     fn write_to_disk(&self, path: impl AsRef<Path>, value: &[u8]) -> Result<()> {
         let mut file = File::create(path)?;
-        file.write_all(&value)?;
+        file.write_all(value)?;
         file.sync_data()?;
         Ok(())
     }
@@ -74,62 +74,6 @@ impl Disk {
 
 impl CacheStrategy for Disk {
     type CacheEntry = Entry;
-
-    fn recover<K, F>(&mut self, recover_key: F) -> Result<Vec<(K, Self::CacheEntry)>>
-    where
-        F: Fn(&str) -> Option<K>,
-    {
-        // Create the `lost+found` directory
-        let lost_found_dir = self.cache_dir.join("lost+found");
-        std::fs::create_dir_all(&lost_found_dir)?;
-
-        // Closure to move files to the `lost+found` directory
-        let move_to_lost_found = |source: &Path| {
-            // We explcitly ignore any errors here, as we don't want to fail
-            // the entire recovery process because of a single file.
-            let Some(file_name) = source.file_name() else { return };
-            let target_path = lost_found_dir.join(file_name);
-            _ = std::fs::rename(source, target_path);
-        };
-
-        // Iterate over all files in the cache directory
-        let mut entries = Vec::new();
-        for entry in std::fs::read_dir(&self.cache_dir)?.filter_map(|e| e.ok()) {
-            let path = entry.path();
-
-            // Skip directories
-            if path.is_dir() {
-                continue;
-            }
-
-            // If key recovery fails, we move the entry to the `lost+found` directory.
-            let Some(key) = path.file_name().and_then(|p| p.to_str()).and_then(|s| recover_key(s)) else {
-                move_to_lost_found(&path);
-                continue
-            };
-
-            // Read file
-            let mut file = File::open(&path)?;
-            let mut buf = Vec::new();
-            file.read_to_end(&mut buf)?;
-
-            // Increment limits
-            self.current_byte_count += buf.len();
-            self.current_entry_count += 1;
-
-            // Push entry
-            entries.push((
-                key,
-                Entry {
-                    path,
-                    byte_len: buf.len(),
-                },
-            ));
-        }
-
-        // Return recovered entries
-        Ok(entries)
-    }
 
     fn put<'a>(
         &mut self,
@@ -187,6 +131,64 @@ impl CacheStrategy for Disk {
         self.current_entry_count -= 1;
 
         Ok(())
+    }
+}
+
+impl RecoverableStrategy for Disk {
+    fn recover<K, F>(&mut self, mut recover_key: F) -> Result<Vec<(K, Self::CacheEntry)>>
+    where
+        F: Fn(&str) -> Option<K>,
+    {
+        // Create the `lost+found` directory
+        let lost_found_dir = self.cache_dir.join("lost+found");
+        std::fs::create_dir_all(&lost_found_dir)?;
+
+        // Closure to move files to the `lost+found` directory
+        let move_to_lost_found = |source: &Path| {
+            // We explcitly ignore any errors here, as we don't want to fail
+            // the entire recovery process because of a single file.
+            let Some(file_name) = source.file_name() else { return };
+            let target_path = lost_found_dir.join(file_name);
+            _ = std::fs::rename(source, target_path);
+        };
+
+        // Iterate over all files in the cache directory
+        let mut entries = Vec::new();
+        for entry in std::fs::read_dir(&self.cache_dir)?.filter_map(|e| e.ok()) {
+            let path = entry.path();
+
+            // Skip directories
+            if path.is_dir() {
+                continue;
+            }
+
+            // If key recovery fails, we move the entry to the `lost+found` directory.
+            let Some(key) = path.file_name().and_then(|p| p.to_str()).and_then(&mut recover_key) else {
+                move_to_lost_found(&path);
+                continue
+            };
+
+            // Read file
+            let mut file = File::open(&path)?;
+            let mut buf = Vec::new();
+            file.read_to_end(&mut buf)?;
+
+            // Increment limits
+            self.current_byte_count += buf.len();
+            self.current_entry_count += 1;
+
+            // Push entry
+            entries.push((
+                key,
+                Entry {
+                    path,
+                    byte_len: buf.len(),
+                },
+            ));
+        }
+
+        // Return recovered entries
+        Ok(entries)
     }
 }
 

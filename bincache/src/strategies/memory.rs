@@ -141,14 +141,13 @@ mod tests {
         assert_eq!(cache.get("foo").unwrap(), b"foo".as_slice());
         assert_eq!(cache.get("bar").unwrap(), b"bar".as_slice());
 
-        match cache.put("baz", b"baz".to_vec()) {
-            Err(err) => match err {
+        if let Err(err) = cache.put("baz", b"baz".to_vec()) {
+            match err {
                 Error::LimitExceeded { limit_kind } => {
                     assert_eq!(limit_kind, LIMIT_KIND_BYTE);
                 }
                 _ => panic!("Unexpected error: {:?}", err),
-            },
-            _ => (),
+            }
         }
     }
 
@@ -162,31 +161,13 @@ mod tests {
         assert_eq!(cache.get("foo").unwrap(), b"foo".as_slice());
         assert_eq!(cache.get("bar").unwrap(), b"bar".as_slice());
 
-        match cache.put("baz", b"baz".to_vec()) {
-            Err(err) => match err {
+        if let Err(err) = cache.put("baz", b"baz".to_vec()) {
+            match err {
                 Error::LimitExceeded { limit_kind } => {
                     assert_eq!(limit_kind, LIMIT_KIND_ENTRY);
                 }
                 _ => panic!("Unexpected error: {:?}", err),
-            },
-            _ => (),
-        }
-    }
-
-    #[test]
-    fn test_recovery() {
-        // populate cache
-        {
-            let mut cache = Cache::new(Memory::default());
-
-            cache.put("foo", b"foo".to_vec()).unwrap();
-            cache.put("bar", b"bar".to_vec()).unwrap();
-        }
-
-        // recover cache
-        {
-            let mut cache = Cache::new(Memory::default());
-            cache.recover(|k| Some(k.to_string())).unwrap();
+            }
         }
     }
 }

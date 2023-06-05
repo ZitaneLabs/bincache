@@ -1,5 +1,5 @@
 use crate::{
-    traits::{CacheKey, CacheStrategy},
+    traits::{CacheKey, CacheStrategy, FlushableStrategy, RecoverableStrategy},
     Result,
 };
 
@@ -27,32 +27,6 @@ where
             data: HashMap::new(),
             strategy,
         }
-    }
-
-    /// Recover the cache from a previous state.
-    /// Returns the number of recovered items.
-    ///
-    /// ## When to recover
-    /// Useful after a crash or unplanned restart. It's good practice to call this
-    /// method on startup, but it depends on your specific use case.
-    ///
-    /// ## Disclaimer
-    /// This is a best-effort operation, full recovery is not guaranteed.
-    /// For memory-based caches, no recovery is possible.
-    pub fn recover<F>(&mut self, key_from_str: F) -> Result<usize>
-    where
-        F: Fn(&str) -> Option<K>,
-    {
-        // Recover cache using the strategy
-        let entries = self.strategy.recover(key_from_str)?;
-        let recovered_item_count = entries.len();
-
-        // Insert recovered entries into the cache
-        for (key, entry) in entries {
-            self.data.insert(key, entry);
-        }
-
-        Ok(recovered_item_count)
     }
 
     /// Put an entry into the cache.
@@ -83,5 +57,73 @@ where
     #[cfg(test)]
     pub(crate) fn strategy(&self) -> &S {
         &self.strategy
+    }
+}
+
+impl<K, S> Cache<K, S>
+where
+    K: CacheKey + Eq + Hash,
+    S: RecoverableStrategy,
+{
+    /// Recover the cache from a previous state.
+    /// Returns the number of recovered items.
+    ///
+    /// ## When to recover
+    /// Useful after a crash or unplanned restart. It's good practice to call this
+    /// method on startup, but it depends on your specific use case.
+    ///
+    /// ## Disclaimer
+    /// This is a best-effort operation, full recovery is not guaranteed.
+    pub fn recover<F>(&mut self, key_from_str: F) -> Result<usize>
+    where
+        F: Fn(&str) -> Option<K>,
+    {
+        // Recover cache using the strategy
+        let entries = self.strategy.recover(key_from_str)?;
+        let recovered_item_count = entries.len();
+
+        // Insert recovered entries into the cache
+        for (key, entry) in entries {
+            self.data.insert(key, entry);
+        }
+
+        Ok(recovered_item_count)
+    }
+}
+
+impl<K, S> Cache<K, S>
+where
+    K: CacheKey + Eq + Hash + ToOwned<Owned = K>,
+    S: FlushableStrategy,
+{
+    /// Flush entries to an underlying non-volatile storage.
+    /// Returns the number of flushed items.
+    pub fn flush(&mut self) -> Result<usize> {
+        let mut flushed_item_count = 0;
+        let mut keys_to_remove = Vec::<K>::new();
+        let mut entries_to_insert = Vec::new();
+
+        // Flush all entries using the strategy
+        for (key, entry) in self.data.iter() {
+            let Some(new_entry) = self.strategy.flush(key, entry)? else {
+                continue;
+            };
+            keys_to_remove.push(key.to_owned());
+            entries_to_insert.push((key.to_owned(), new_entry));
+            flushed_item_count += 1;
+        }
+
+        // Remove flushed entries from the cache
+        for key in keys_to_remove {
+            let entry = self.data.remove(&key).ok_or(crate::Error::KeyNotFound)?;
+            self.strategy.delete(entry)?;
+        }
+
+        // Insert moved entries into the cache
+        for (key, entry) in entries_to_insert {
+            self.data.insert(key, entry);
+        }
+
+        Ok(flushed_item_count)
     }
 }
