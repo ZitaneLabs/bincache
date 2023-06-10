@@ -256,6 +256,7 @@ mod tests {
     use super::{Disk, LIMIT_KIND_BYTE, LIMIT_KIND_ENTRY};
     use crate::{test_utils::TempDir, Cache, Error};
 
+    #[cfg_attr(feature = "blocking", tokio::test)]
     #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
     async fn test_default() {
         let temp_dir = TempDir::new();
@@ -287,6 +288,7 @@ mod tests {
         assert_eq!(cache.strategy().current_entry_count, 0);
     }
 
+    #[cfg_attr(feature = "blocking", tokio::test)]
     #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
     async fn test_strategy_with_byte_limit() {
         let temp_dir = TempDir::new();
@@ -317,6 +319,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(feature = "blocking", tokio::test)]
     #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
     async fn test_strategy_with_entry_limit() {
         let temp_dir = TempDir::new();
@@ -339,6 +342,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(feature = "blocking", tokio::test)]
     #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
     async fn test_recovery() {
         let temp_dir = TempDir::new();

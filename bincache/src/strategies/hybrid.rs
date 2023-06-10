@@ -397,6 +397,7 @@ mod tests {
     use super::{Hybrid, Limits, LIMIT_KIND_BYTE_DISK, LIMIT_KIND_ENTRY_DISK};
     use crate::{test_utils::TempDir, Cache, Error};
 
+    #[cfg_attr(feature = "blocking", tokio::test)]
     #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
     async fn test_default_strategy() {
         // We don't need a temp dir here, because we don't write to disk
@@ -436,6 +437,7 @@ mod tests {
         assert_eq!(cache.strategy().disk_limits.current_entry_count, 0);
     }
 
+    #[cfg_attr(feature = "blocking", tokio::test)]
     #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
     async fn test_strategy_with_memory_byte_limit() {
         let temp_dir = TempDir::new();
@@ -457,6 +459,7 @@ mod tests {
         assert!(metadata(temp_dir.as_ref().join("baz")).unwrap().is_file());
     }
 
+    #[cfg_attr(feature = "blocking", tokio::test)]
     #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
     async fn test_strategy_with_memory_entry_limit() {
         let temp_dir = TempDir::new();
@@ -478,6 +481,7 @@ mod tests {
         assert!(metadata(temp_dir.as_ref().join("baz")).unwrap().is_file());
     }
 
+    #[cfg_attr(feature = "blocking", tokio::test)]
     #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
     async fn test_strategy_with_memory_and_disk_byte_limit() {
         let temp_dir = TempDir::new();
@@ -513,6 +517,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(feature = "blocking", tokio::test)]
     #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
     async fn test_strategy_with_memory_and_disk_entry_limit() {
         let temp_dir = TempDir::new();
@@ -548,6 +553,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(feature = "blocking", tokio::test)]
     #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
     async fn test_recovery() {
         let temp_dir = TempDir::new();
@@ -583,6 +589,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(feature = "blocking", tokio::test)]
     #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
     async fn test_flush() {
         let temp_dir = TempDir::new();

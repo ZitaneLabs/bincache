@@ -84,6 +84,7 @@ mod tests {
         _ = NoopCacheBuilder::new().build::<String>().unwrap();
     }
 
+    #[cfg_attr(feature = "blocking", tokio::test)]
     #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
     async fn test_key_inference() {
         let mut cache = CacheBuilder::default().with_strategy(Noop).build().unwrap();

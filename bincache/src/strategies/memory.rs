@@ -103,6 +103,7 @@ mod tests {
     use super::{Memory, LIMIT_KIND_BYTE, LIMIT_KIND_ENTRY};
     use crate::{Cache, Error};
 
+    #[cfg_attr(feature = "blocking", tokio::test)]
     #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
     async fn test_default_strategy() {
         let mut cache = Cache::new(Memory::default());
@@ -133,6 +134,7 @@ mod tests {
         assert_eq!(cache.strategy().current_entry_count, 0);
     }
 
+    #[cfg_attr(feature = "blocking", tokio::test)]
     #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
     async fn test_strategy_with_byte_limit() {
         let mut cache = Cache::new(Memory::new(Some(6), None));
@@ -153,6 +155,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(feature = "blocking", tokio::test)]
     #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
     async fn test_strategy_with_entry_limit() {
         let mut cache = Cache::new(Memory::new(None, Some(3)));
