@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use std::borrow::Cow;
 
 use crate::{
@@ -8,26 +9,27 @@ use crate::{
 #[derive(Debug)]
 pub struct Noop;
 
+#[async_trait]
 impl CacheStrategy for Noop {
     type CacheEntry = ();
 
-    fn put<'a>(
-        &mut self,
-        _key: &impl CacheKey,
-        _value: impl Into<Cow<'a, [u8]>>,
-    ) -> Result<Self::CacheEntry> {
+    async fn put<'a, K, V>(&mut self, _key: &K, _value: V) -> Result<Self::CacheEntry>
+    where
+        K: CacheKey + Sync + Send,
+        V: Into<Cow<'a, [u8]>> + Send,
+    {
         Ok(())
     }
 
-    fn get<'a>(&self, _entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>> {
+    async fn get<'a>(&self, _entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>> {
         Ok(Cow::Borrowed(&[]))
     }
 
-    fn take(&mut self, _entry: Self::CacheEntry) -> Result<Vec<u8>> {
+    async fn take(&mut self, _entry: Self::CacheEntry) -> Result<Vec<u8>> {
         Ok(vec![])
     }
 
-    fn delete(&mut self, _entry: Self::CacheEntry) -> Result<()> {
+    async fn delete(&mut self, _entry: Self::CacheEntry) -> Result<()> {
         Ok(())
     }
 }

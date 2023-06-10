@@ -54,7 +54,7 @@ where
     /// Build the [Cache].
     pub fn build<K>(self) -> Result<Cache<K, S>>
     where
-        K: CacheKey + Eq + Hash,
+        K: CacheKey + Eq + Hash + Sync + Send,
     {
         Ok(Cache::new(self.strategy.ok_or(Error::NoStrategy)?))
     }
@@ -84,9 +84,9 @@ mod tests {
         _ = NoopCacheBuilder::new().build::<String>().unwrap();
     }
 
-    #[test]
-    fn test_key_inference() {
+    #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
+    async fn test_key_inference() {
         let mut cache = CacheBuilder::default().with_strategy(Noop).build().unwrap();
-        cache.put("test".to_string(), vec![]).unwrap();
+        cache.put("test".to_string(), vec![]).await.unwrap();
     }
 }

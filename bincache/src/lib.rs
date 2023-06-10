@@ -48,6 +48,9 @@
 //! Happy coding with `bincache`!
 //!
 
+#[cfg(all(feature = "blocking", feature = "tokio_rt_1"))]
+compile_error!("Cannot enable both the `blocking` and `tokio_rt_1` features at the same time.");
+
 #[cfg(test)]
 mod test_utils;
 
