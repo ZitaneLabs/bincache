@@ -20,3 +20,21 @@ macro_rules! reexport_strategy {
         }
     };
 }
+
+#[cfg(test)]
+#[macro_export]
+macro_rules! async_test {
+    ($(async fn $name:ident () $body:block)+) => {
+        $(
+            paste::paste! {
+                #[cfg_attr(feature = "blocking", tokio::test(flavor = "current_thread"))]
+                #[cfg_attr(feature = "tokio_rt_1", tokio::test(flavor = "current_thread"))]
+                async fn [<$name _ st>] () $body
+
+                #[cfg_attr(feature = "blocking", tokio::test(flavor = "multi_thread"))]
+                #[cfg_attr(feature = "tokio_rt_1", tokio::test(flavor = "multi_thread"))]
+                async fn [<$name _ mt>] () $body
+            }
+        )+
+    };
+}

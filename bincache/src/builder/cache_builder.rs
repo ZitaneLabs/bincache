@@ -72,7 +72,7 @@ impl Default for CacheBuilder<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::strategies::Noop;
+    use crate::{async_test, strategies::Noop};
 
     use super::*;
 
@@ -87,10 +87,10 @@ mod tests {
         _ = NoopCacheBuilder::new().build::<String>().unwrap();
     }
 
-    #[cfg_attr(feature = "blocking", tokio::test)]
-    #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
-    async fn test_key_inference() {
-        let mut cache = CacheBuilder::default().with_strategy(Noop).build().unwrap();
-        cache.put("test".to_string(), vec![]).await.unwrap();
+    async_test! {
+        async fn test_key_inference() {
+            let mut cache = CacheBuilder::default().with_strategy(Noop).build().unwrap();
+            cache.put("test".to_string(), vec![]).await.unwrap();
+        }
     }
 }

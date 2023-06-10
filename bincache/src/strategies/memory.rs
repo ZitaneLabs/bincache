@@ -101,77 +101,73 @@ impl CacheStrategy for Memory {
 #[cfg(test)]
 mod tests {
     use super::{Memory, LIMIT_KIND_BYTE, LIMIT_KIND_ENTRY};
-    use crate::{Cache, Error};
+    use crate::{async_test, Cache, Error};
 
-    #[cfg_attr(feature = "blocking", tokio::test)]
-    #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
-    async fn test_default_strategy() {
-        let mut cache = Cache::new(Memory::default());
+    async_test! {
+        async fn test_default_strategy() {
+            let mut cache = Cache::new(Memory::default());
 
-        cache.put("foo", b"foo".to_vec()).await.unwrap();
+            cache.put("foo", b"foo".to_vec()).await.unwrap();
 
-        assert_eq!(cache.strategy().current_byte_count, 3);
-        assert_eq!(cache.strategy().current_entry_count, 1);
+            assert_eq!(cache.strategy().current_byte_count, 3);
+            assert_eq!(cache.strategy().current_entry_count, 1);
 
-        cache.put("bar", b"bar".to_vec()).await.unwrap();
+            cache.put("bar", b"bar".to_vec()).await.unwrap();
 
-        assert_eq!(cache.strategy().current_byte_count, 6);
-        assert_eq!(cache.strategy().current_entry_count, 2);
+            assert_eq!(cache.strategy().current_byte_count, 6);
+            assert_eq!(cache.strategy().current_entry_count, 2);
 
-        assert_eq!(cache.get("foo").await.unwrap(), b"foo".as_slice());
-        assert_eq!(cache.get("bar").await.unwrap(), b"bar".as_slice());
+            assert_eq!(cache.get("foo").await.unwrap(), b"foo".as_slice());
+            assert_eq!(cache.get("bar").await.unwrap(), b"bar".as_slice());
 
-        assert!(cache.get("baz").await.is_err());
+            assert!(cache.get("baz").await.is_err());
 
-        cache.delete("foo").await.unwrap();
+            cache.delete("foo").await.unwrap();
 
-        assert_eq!(cache.strategy().current_byte_count, 3);
-        assert_eq!(cache.strategy().current_entry_count, 1);
+            assert_eq!(cache.strategy().current_byte_count, 3);
+            assert_eq!(cache.strategy().current_entry_count, 1);
 
-        cache.delete("bar").await.unwrap();
+            cache.delete("bar").await.unwrap();
 
-        assert_eq!(cache.strategy().current_byte_count, 0);
-        assert_eq!(cache.strategy().current_entry_count, 0);
-    }
+            assert_eq!(cache.strategy().current_byte_count, 0);
+            assert_eq!(cache.strategy().current_entry_count, 0);
+        }
 
-    #[cfg_attr(feature = "blocking", tokio::test)]
-    #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
-    async fn test_strategy_with_byte_limit() {
-        let mut cache = Cache::new(Memory::new(Some(6), None));
+        async fn test_strategy_with_byte_limit() {
+            let mut cache = Cache::new(Memory::new(Some(6), None));
 
-        cache.put("foo", b"foo".to_vec()).await.unwrap();
-        cache.put("bar", b"bar".to_vec()).await.unwrap();
+            cache.put("foo", b"foo".to_vec()).await.unwrap();
+            cache.put("bar", b"bar".to_vec()).await.unwrap();
 
-        assert_eq!(cache.get("foo").await.unwrap(), b"foo".as_slice());
-        assert_eq!(cache.get("bar").await.unwrap(), b"bar".as_slice());
+            assert_eq!(cache.get("foo").await.unwrap(), b"foo".as_slice());
+            assert_eq!(cache.get("bar").await.unwrap(), b"bar".as_slice());
 
-        if let Err(err) = cache.put("baz", b"baz".to_vec()).await {
-            match err {
-                Error::LimitExceeded { limit_kind } => {
-                    assert_eq!(limit_kind, LIMIT_KIND_BYTE);
+            if let Err(err) = cache.put("baz", b"baz".to_vec()).await {
+                match err {
+                    Error::LimitExceeded { limit_kind } => {
+                        assert_eq!(limit_kind, LIMIT_KIND_BYTE);
+                    }
+                    _ => panic!("Unexpected error: {:?}", err),
                 }
-                _ => panic!("Unexpected error: {:?}", err),
             }
         }
-    }
 
-    #[cfg_attr(feature = "blocking", tokio::test)]
-    #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
-    async fn test_strategy_with_entry_limit() {
-        let mut cache = Cache::new(Memory::new(None, Some(3)));
+        async fn test_strategy_with_entry_limit() {
+            let mut cache = Cache::new(Memory::new(None, Some(3)));
 
-        cache.put("foo", b"foo".to_vec()).await.unwrap();
-        cache.put("bar", b"bar".to_vec()).await.unwrap();
+            cache.put("foo", b"foo".to_vec()).await.unwrap();
+            cache.put("bar", b"bar".to_vec()).await.unwrap();
 
-        assert_eq!(cache.get("foo").await.unwrap(), b"foo".as_slice());
-        assert_eq!(cache.get("bar").await.unwrap(), b"bar".as_slice());
+            assert_eq!(cache.get("foo").await.unwrap(), b"foo".as_slice());
+            assert_eq!(cache.get("bar").await.unwrap(), b"bar".as_slice());
 
-        if let Err(err) = cache.put("baz", b"baz".to_vec()).await {
-            match err {
-                Error::LimitExceeded { limit_kind } => {
-                    assert_eq!(limit_kind, LIMIT_KIND_ENTRY);
+            if let Err(err) = cache.put("baz", b"baz".to_vec()).await {
+                match err {
+                    Error::LimitExceeded { limit_kind } => {
+                        assert_eq!(limit_kind, LIMIT_KIND_ENTRY);
+                    }
+                    _ => panic!("Unexpected error: {:?}", err),
                 }
-                _ => panic!("Unexpected error: {:?}", err),
             }
         }
     }

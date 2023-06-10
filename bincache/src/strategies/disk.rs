@@ -254,118 +254,112 @@ impl RecoverableStrategy for Disk {
 #[cfg(test)]
 mod tests {
     use super::{Disk, LIMIT_KIND_BYTE, LIMIT_KIND_ENTRY};
-    use crate::{test_utils::TempDir, Cache, Error};
+    use crate::{async_test, test_utils::TempDir, Cache, Error};
 
-    #[cfg_attr(feature = "blocking", tokio::test)]
-    #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
-    async fn test_default() {
-        let temp_dir = TempDir::new();
-        let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None));
-
-        cache.put("foo", b"foo".to_vec()).await.unwrap();
-
-        assert_eq!(cache.strategy().current_byte_count, 3);
-        assert_eq!(cache.strategy().current_entry_count, 1);
-
-        cache.put("bar", b"bar".to_vec()).await.unwrap();
-
-        assert_eq!(cache.strategy().current_byte_count, 6);
-        assert_eq!(cache.strategy().current_entry_count, 2);
-
-        assert_eq!(cache.get("foo").await.unwrap(), b"foo".as_slice());
-        assert_eq!(cache.get("bar").await.unwrap(), b"bar".as_slice());
-
-        assert!(cache.get("baz").await.is_err());
-
-        cache.delete("foo").await.unwrap();
-
-        assert_eq!(cache.strategy().current_byte_count, 3);
-        assert_eq!(cache.strategy().current_entry_count, 1);
-
-        cache.delete("bar").await.unwrap();
-
-        assert_eq!(cache.strategy().current_byte_count, 0);
-        assert_eq!(cache.strategy().current_entry_count, 0);
-    }
-
-    #[cfg_attr(feature = "blocking", tokio::test)]
-    #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
-    async fn test_strategy_with_byte_limit() {
-        let temp_dir = TempDir::new();
-        let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), Some(6), None));
-
-        let foo_data = b"foo".to_vec();
-        let bar_data = b"bar".to_vec();
-        let baz_data = b"baz".to_vec();
-
-        assert_eq!(foo_data.len(), 3);
-        assert_eq!(bar_data.len(), 3);
-        assert_eq!(baz_data.len(), 3);
-
-        cache.put("foo", foo_data.clone()).await.unwrap();
-        cache.put("bar", bar_data.clone()).await.unwrap();
-
-        assert_eq!(cache.get("foo").await.unwrap(), foo_data.as_slice());
-        assert_eq!(cache.get("bar").await.unwrap(), bar_data.as_slice());
-
-        match cache.put("baz", baz_data).await {
-            Err(err) => match err {
-                Error::LimitExceeded { limit_kind } => {
-                    assert_eq!(limit_kind, LIMIT_KIND_BYTE);
-                }
-                _ => panic!("Unexpected error: {:?}", err),
-            },
-            _ => (),
-        }
-    }
-
-    #[cfg_attr(feature = "blocking", tokio::test)]
-    #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
-    async fn test_strategy_with_entry_limit() {
-        let temp_dir = TempDir::new();
-        let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, Some(3)));
-
-        cache.put("foo", b"foo".to_vec()).await.unwrap();
-        cache.put("bar", b"bar".to_vec()).await.unwrap();
-
-        assert_eq!(cache.get("foo").await.unwrap(), b"foo".as_slice());
-        assert_eq!(cache.get("bar").await.unwrap(), b"bar".as_slice());
-
-        match cache.put("baz", b"baz".to_vec()).await {
-            Err(err) => match err {
-                Error::LimitExceeded { limit_kind } => {
-                    assert_eq!(limit_kind, LIMIT_KIND_ENTRY);
-                }
-                _ => panic!("Unexpected error: {:?}", err),
-            },
-            _ => (),
-        }
-    }
-
-    #[cfg_attr(feature = "blocking", tokio::test)]
-    #[cfg_attr(feature = "tokio_rt_1", tokio::test)]
-    async fn test_recovery() {
-        let temp_dir = TempDir::new();
-
-        // populate cache
-        {
+    async_test! {
+        async fn test_default() {
+            let temp_dir = TempDir::new();
             let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None));
 
             cache.put("foo", b"foo".to_vec()).await.unwrap();
+
+            assert_eq!(cache.strategy().current_byte_count, 3);
+            assert_eq!(cache.strategy().current_entry_count, 1);
+
             cache.put("bar", b"bar".to_vec()).await.unwrap();
-        }
 
-        // recover cache
-        {
-            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None));
-            let recovered_items = cache
-                .recover(|k| Some(k.to_string()))
-                .await
-                .expect("Failed to recover");
-
-            assert_eq!(recovered_items, 2);
             assert_eq!(cache.strategy().current_byte_count, 6);
             assert_eq!(cache.strategy().current_entry_count, 2);
+
+            assert_eq!(cache.get("foo").await.unwrap(), b"foo".as_slice());
+            assert_eq!(cache.get("bar").await.unwrap(), b"bar".as_slice());
+
+            assert!(cache.get("baz").await.is_err());
+
+            cache.delete("foo").await.unwrap();
+
+            assert_eq!(cache.strategy().current_byte_count, 3);
+            assert_eq!(cache.strategy().current_entry_count, 1);
+
+            cache.delete("bar").await.unwrap();
+
+            assert_eq!(cache.strategy().current_byte_count, 0);
+            assert_eq!(cache.strategy().current_entry_count, 0);
+        }
+
+        async fn test_strategy_with_byte_limit() {
+            let temp_dir = TempDir::new();
+            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), Some(6), None));
+
+            let foo_data = b"foo".to_vec();
+            let bar_data = b"bar".to_vec();
+            let baz_data = b"baz".to_vec();
+
+            assert_eq!(foo_data.len(), 3);
+            assert_eq!(bar_data.len(), 3);
+            assert_eq!(baz_data.len(), 3);
+
+            cache.put("foo", foo_data.clone()).await.unwrap();
+            cache.put("bar", bar_data.clone()).await.unwrap();
+
+            assert_eq!(cache.get("foo").await.unwrap(), foo_data.as_slice());
+            assert_eq!(cache.get("bar").await.unwrap(), bar_data.as_slice());
+
+            match cache.put("baz", baz_data).await {
+                Err(err) => match err {
+                    Error::LimitExceeded { limit_kind } => {
+                        assert_eq!(limit_kind, LIMIT_KIND_BYTE);
+                    }
+                    _ => panic!("Unexpected error: {:?}", err),
+                },
+                _ => (),
+            }
+        }
+
+        async fn test_strategy_with_entry_limit() {
+            let temp_dir = TempDir::new();
+            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, Some(3)));
+
+            cache.put("foo", b"foo".to_vec()).await.unwrap();
+            cache.put("bar", b"bar".to_vec()).await.unwrap();
+
+            assert_eq!(cache.get("foo").await.unwrap(), b"foo".as_slice());
+            assert_eq!(cache.get("bar").await.unwrap(), b"bar".as_slice());
+
+            match cache.put("baz", b"baz".to_vec()).await {
+                Err(err) => match err {
+                    Error::LimitExceeded { limit_kind } => {
+                        assert_eq!(limit_kind, LIMIT_KIND_ENTRY);
+                    }
+                    _ => panic!("Unexpected error: {:?}", err),
+                },
+                _ => (),
+            }
+        }
+
+        async fn test_recovery() {
+            let temp_dir = TempDir::new();
+
+            // populate cache
+            {
+                let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None));
+
+                cache.put("foo", b"foo".to_vec()).await.unwrap();
+                cache.put("bar", b"bar".to_vec()).await.unwrap();
+            }
+
+            // recover cache
+            {
+                let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None));
+                let recovered_items = cache
+                    .recover(|k| Some(k.to_string()))
+                    .await
+                    .expect("Failed to recover");
+
+                assert_eq!(recovered_items, 2);
+                assert_eq!(cache.strategy().current_byte_count, 6);
+                assert_eq!(cache.strategy().current_entry_count, 2);
+            }
         }
     }
 }
