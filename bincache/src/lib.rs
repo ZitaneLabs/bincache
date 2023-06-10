@@ -52,6 +52,11 @@
 //! bincache is licensed under the MIT license.
 //!
 
+#[cfg(not(any(feature = "blocking", feature = "tokio_rt_1")))]
+compile_error!(
+    "Cannot run without a runtime. Please enable either the `blocking` or `tokio_rt_1` feature."
+);
+
 #[cfg(all(feature = "blocking", feature = "tokio_rt_1"))]
 compile_error!("Cannot enable both the `blocking` and `tokio_rt_1` features at the same time.");
 
