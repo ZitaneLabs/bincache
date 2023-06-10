@@ -27,12 +27,9 @@ macro_rules! async_test {
     ($(async fn $name:ident () $body:block)+) => {
         $(
             paste::paste! {
-                #[cfg_attr(feature = "blocking", tokio::test(flavor = "current_thread"))]
-                #[cfg_attr(feature = "tokio_rt_1", tokio::test(flavor = "current_thread"))]
-                async fn [<$name _ st>] () $body
-
                 #[cfg_attr(feature = "blocking", tokio::test(flavor = "multi_thread"))]
-                #[cfg_attr(feature = "tokio_rt_1", tokio::test(flavor = "multi_thread"))]
+                #[cfg_attr(feature = "tokio1", tokio::test(flavor = "multi_thread"))]
+                #[cfg_attr(feature = "async-std1", async_std::test)]
                 async fn [<$name _ mt>] () $body
             }
         )+

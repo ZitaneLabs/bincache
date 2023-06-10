@@ -52,13 +52,17 @@
 //! bincache is licensed under the MIT license.
 //!
 
-#[cfg(not(any(feature = "blocking", feature = "tokio_rt_1")))]
+#[cfg(not(any(feature = "blocking", feature = "tokio1", feature = "async-std1")))]
 compile_error!(
-    "Cannot run without a runtime. Please enable either the `blocking` or `tokio_rt_1` feature."
+    "Cannot run without an async runtime.\nPlease enable one of the following features: [blocking, tokio1, async-std1]."
 );
 
-#[cfg(all(feature = "blocking", feature = "tokio_rt_1"))]
-compile_error!("Cannot enable both the `blocking` and `tokio_rt_1` features at the same time.");
+#[cfg(any(
+    all(feature = "blocking", feature = "tokio1"),
+    all(feature = "blocking", feature = "async-std1"),
+    all(feature = "tokio1", feature = "async-std1")
+))]
+compile_error!("Cannot enable multiple async runtime features at the same time.");
 
 #[cfg(test)]
 mod test_utils;

@@ -29,8 +29,10 @@ Bincache uses a strategy pattern to allow for different caching strategies:
 ## Usage
 
 1. Add `bincache` to your project:
-    ```plain,no_run
-    cargo add bincache
+    ```bash,no_run
+    cargo add bincache                       # use blocking I/O
+    cargo add bincache --features tokio1     # enable tokio 1.x support
+    cargo add bincache --features async-std1 # enable async-std 1.x support
     ```
 
 2. Create a `Cache` instance with your preferred strategy:

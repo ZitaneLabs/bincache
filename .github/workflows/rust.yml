@@ -23,8 +23,10 @@ jobs:
       - run: curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ${CARGO_HOME:-~/.cargo}/bin
       - name: cargo test (async/blocking)
         run: cargo nextest run --release --no-default-features --features blocking
-      - name: cargo test (async/tokio_rt_1)
-        run: cargo nextest run --release --no-default-features --features tokio_rt_1
+      - name: cargo test (async/tokio1)
+        run: cargo nextest run --release --no-default-features --features tokio1
+      - name: cargo test (async/async-std1)
+        run: cargo nextest run --release --no-default-features --features async-std1
       - name: doctests
         run: cargo test --doc
   clippy:

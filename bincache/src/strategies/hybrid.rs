@@ -123,10 +123,18 @@ impl Hybrid {
             file.read_to_end(&mut buf)?;
             Ok(buf)
         }
-        #[cfg(feature = "tokio_rt_1")]
+        #[cfg(feature = "tokio1")]
         {
-            use tokio::fs::File;
-            use tokio::io::AsyncReadExt;
+            use tokio::{fs::File, io::AsyncReadExt};
+
+            let mut file = File::open(&entry.path).await?;
+            let mut buf = Vec::with_capacity(entry.byte_len);
+            file.read_to_end(&mut buf).await?;
+            Ok(buf)
+        }
+        #[cfg(feature = "async-std1")]
+        {
+            use async_std::{fs::File, io::ReadExt};
 
             let mut file = File::open(&entry.path).await?;
             let mut buf = Vec::with_capacity(entry.byte_len);
@@ -145,14 +153,22 @@ impl Hybrid {
             file.sync_data()?;
             Ok(())
         }
-        #[cfg(feature = "tokio_rt_1")]
+        #[cfg(feature = "tokio1")]
         {
-            use tokio::fs::File;
-            use tokio::io::AsyncWriteExt;
+            use tokio::{fs::File, io::AsyncWriteExt};
 
             let mut file = File::create(path).await?;
             file.write_all(value).await?;
             file.sync_data().await?;
+            Ok(())
+        }
+        #[cfg(feature = "async-std1")]
+        {
+            use async_std::{fs::File, io::WriteExt};
+
+            let mut file = File::create(path.as_ref()).await?;
+            file.write_all(value).await?;
+            file.sync_all().await?;
             Ok(())
         }
     }
@@ -162,9 +178,13 @@ impl Hybrid {
         {
             Ok(std::fs::remove_file(&entry.path)?)
         }
-        #[cfg(feature = "tokio_rt_1")]
+        #[cfg(feature = "tokio1")]
         {
             Ok(tokio::fs::remove_file(&entry.path).await?)
+        }
+        #[cfg(feature = "async-std1")]
+        {
+            Ok(async_std::fs::remove_file(&entry.path).await?)
         }
     }
 }
@@ -311,18 +331,25 @@ impl RecoverableStrategy for Hybrid {
             let buf = {
                 #[cfg(feature = "blocking")]
                 {
-                    use std::fs::File;
-                    use std::io::Read;
+                    use std::{fs::File, io::Read};
 
                     let mut file = File::open(&path)?;
                     let mut buf = Vec::new();
                     file.read_to_end(&mut buf)?;
                     buf
                 }
-                #[cfg(feature = "tokio_rt_1")]
+                #[cfg(feature = "tokio1")]
                 {
-                    use tokio::fs::File;
-                    use tokio::io::AsyncReadExt;
+                    use tokio::{fs::File, io::AsyncReadExt};
+
+                    let mut file = File::open(&path).await?;
+                    let mut buf = Vec::new();
+                    file.read_to_end(&mut buf).await?;
+                    buf
+                }
+                #[cfg(feature = "async-std1")]
+                {
+                    use async_std::{fs::File, io::ReadExt};
 
                     let mut file = File::open(&path).await?;
                     let mut buf = Vec::new();
