@@ -12,12 +12,15 @@ use crate::Result;
 /// ```
 /// use bincache::{CacheBuilder, MemoryStrategy};
 ///
-/// let mut cache = CacheBuilder::default()
-///     .with_strategy(MemoryStrategy::default())
-///     .build()
-///     .unwrap();
+/// #[tokio::main(flavor = "current_thread")]
+/// async fn main() {
+///     let mut cache = CacheBuilder::default()
+///         .with_strategy(MemoryStrategy::default())
+///         .build()
+///         .unwrap();
 ///
-/// cache.put("key", b"value".to_vec()).unwrap();
+///     cache.put("key", b"value".to_vec()).await.unwrap();
+/// }
 /// ```
 #[derive(Debug)]
 pub struct CacheBuilder<S> {

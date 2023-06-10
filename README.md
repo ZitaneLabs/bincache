@@ -35,14 +35,15 @@ Bincache uses a strategy pattern to allow for different caching strategies:
 
 2. Create a `Cache` instance with your preferred strategy:
     ```rust
-    fn main() -> Result<(), Box<dyn std::error::Error>> {
+    #[tokio::main(flavor = "current_thread")]
+    async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut cache = bincache::MemoryCacheBuilder::new().build()?;
 
         // Put a key-value pair into the cache
-        cache.put(&"foo", b"foo".to_vec())?;
+        cache.put(&"foo", b"foo".to_vec()).await?;
 
         // Read the value back out
-        let foo = cache.get(&"foo")?;
+        let foo = cache.get(&"foo").await?;
 
         // Make sure it's the same
         assert_eq!(foo, b"foo".as_slice());

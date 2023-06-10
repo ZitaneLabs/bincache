@@ -1,6 +1,6 @@
 //! # bincache
 //!
-//! `bincache` is a versatile and high-performance binary data caching library for Rust, designed with a focus on flexibility, efficiency, and ease of use. It enables developers to store, retrieve, and manage binary data using various caching strategies, catering to different storage needs and optimization requirements.
+//! `bincache` is a versatile, high-performance, async-first binary data caching library for Rust, designed with a focus on flexibility, efficiency, and ease of use. It enables developers to store, retrieve, and manage binary data using various caching strategies, catering to different storage needs and optimization requirements.
 //!
 //! The library offers several caching strategies out of the box:
 //!
@@ -25,8 +25,11 @@
 //! ```
 //! use bincache::MemoryCacheBuilder;
 //!
-//! let mut cache = MemoryCacheBuilder::new().build().unwrap();
-//! cache.put("key", b"value".to_vec()).unwrap();
+//! #[tokio::main(flavor = "current_thread")]
+//! async fn main() {
+//!     let mut cache = MemoryCacheBuilder::new().build().unwrap();
+//!     cache.put("key", b"value".to_vec()).await.unwrap();
+//! }
 //! ```
 //!
 //! Or use the generic `CacheBuilder` to create a cache with a custom strategy:
@@ -34,18 +37,19 @@
 //! ```
 //! use bincache::{Cache, CacheBuilder, MemoryStrategy};
 //!
-//! let mut cache = CacheBuilder::default()
-//!     .with_strategy(MemoryStrategy::default())
-//!     .build()
-//!     .unwrap();
-//! cache.put("key", b"value".to_vec()).unwrap();
+//! #[tokio::main(flavor = "current_thread")]
+//! async fn main() {
+//!     let mut cache = CacheBuilder::default()
+//!         .with_strategy(MemoryStrategy::default())
+//!         .build()
+//!         .unwrap();
+//!     cache.put("key", b"value".to_vec()).await.unwrap();
+//! }
 //! ```
 //!
 //! ## License
 //!
 //! bincache is licensed under the MIT license.
-//!
-//! Happy coding with `bincache`!
 //!
 
 #[cfg(all(feature = "blocking", feature = "tokio_rt_1"))]
