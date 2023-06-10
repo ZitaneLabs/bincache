@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     traits::{CacheKey, CacheStrategy, FlushableStrategy, RecoverableStrategy},
-    Result,
+    DiskUtil, Result,
 };
 
 const LIMIT_KIND_BYTE_DISK: &str = "Stored bytes on disk";
@@ -112,81 +112,6 @@ impl Hybrid {
             disk_limits,
         }
     }
-
-    async fn read_from_disk(&self, entry: &DiskEntry) -> Result<Vec<u8>> {
-        #[cfg(feature = "blocking")]
-        {
-            use std::{fs::File, io::Read};
-
-            let mut file = File::open(&entry.path)?;
-            let mut buf = Vec::with_capacity(entry.byte_len);
-            file.read_to_end(&mut buf)?;
-            Ok(buf)
-        }
-        #[cfg(feature = "tokio1")]
-        {
-            use tokio::{fs::File, io::AsyncReadExt};
-
-            let mut file = File::open(&entry.path).await?;
-            let mut buf = Vec::with_capacity(entry.byte_len);
-            file.read_to_end(&mut buf).await?;
-            Ok(buf)
-        }
-        #[cfg(feature = "async-std1")]
-        {
-            use async_std::{fs::File, io::ReadExt};
-
-            let mut file = File::open(&entry.path).await?;
-            let mut buf = Vec::with_capacity(entry.byte_len);
-            file.read_to_end(&mut buf).await?;
-            Ok(buf)
-        }
-    }
-
-    async fn write_to_disk(&self, path: impl AsRef<Path>, value: &[u8]) -> Result<()> {
-        #[cfg(feature = "blocking")]
-        {
-            use std::{fs::File, io::Write};
-
-            let mut file = File::create(path)?;
-            file.write_all(value)?;
-            file.sync_data()?;
-            Ok(())
-        }
-        #[cfg(feature = "tokio1")]
-        {
-            use tokio::{fs::File, io::AsyncWriteExt};
-
-            let mut file = File::create(path).await?;
-            file.write_all(value).await?;
-            file.sync_data().await?;
-            Ok(())
-        }
-        #[cfg(feature = "async-std1")]
-        {
-            use async_std::{fs::File, io::WriteExt};
-
-            let mut file = File::create(path.as_ref()).await?;
-            file.write_all(value).await?;
-            file.sync_all().await?;
-            Ok(())
-        }
-    }
-
-    async fn delete_from_disk(&self, entry: &DiskEntry) -> Result<()> {
-        #[cfg(feature = "blocking")]
-        {
-            Ok(std::fs::remove_file(&entry.path)?)
-        }
-        #[cfg(feature = "tokio1")]
-        {
-            Ok(tokio::fs::remove_file(&entry.path).await?)
-        }
-        #[cfg(feature = "async-std1")]
-        {
-            Ok(async_std::fs::remove_file(&entry.path).await?)
-        }
-    }
 }
 
 #[async_trait]
@@ -220,7 +145,7 @@ impl CacheStrategy for Hybrid {
         else if fits_into_disk.is_satisfied() {
             // Write to disk
             let path = self.cache_dir.join(key.to_key());
-            self.write_to_disk(&path, &value).await?;
+            DiskUtil::write(&path, &value).await?;
 
             // Increment limits
             self.disk_limits.current_byte_count += byte_len;
@@ -243,7 +168,9 @@ impl CacheStrategy for Hybrid {
     async fn get<'a>(&self, entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>> {
         match entry {
             Entry::Memory(entry) => Ok(Cow::Borrowed(&entry.data)),
-            Entry::Disk(entry) => Ok(Cow::Owned(self.read_from_disk(entry).await?)),
+            Entry::Disk(entry) => Ok(Cow::Owned(
+                DiskUtil::read(&entry.path, Some(entry.byte_len)).await?,
+            )),
         }
     }
 
@@ -257,10 +184,10 @@ impl CacheStrategy for Hybrid {
                 Ok(entry.data)
             }
             Entry::Disk(ref entry) => {
-                let data = self.read_from_disk(entry).await?;
+                let data = DiskUtil::read(&entry.path, Some(entry.byte_len)).await?;
 
                 // Delete from disk
-                self.delete_from_disk(entry).await?;
+                DiskUtil::delete(&entry.path).await?;
 
                 // Decrement limits
                 self.disk_limits.current_byte_count -= entry.byte_len;
@@ -280,7 +207,7 @@ impl CacheStrategy for Hybrid {
             }
             Entry::Disk(entry) => {
                 // Delete from disk
-                self.delete_from_disk(&entry).await?;
+                DiskUtil::delete(&entry.path).await?;
 
                 // Decrement limits
                 self.disk_limits.current_byte_count -= entry.byte_len;
@@ -328,35 +255,7 @@ impl RecoverableStrategy for Hybrid {
             };
 
             // Read file
-            let buf = {
-                #[cfg(feature = "blocking")]
-                {
-                    use std::{fs::File, io::Read};
-
-                    let mut file = File::open(&path)?;
-                    let mut buf = Vec::new();
-                    file.read_to_end(&mut buf)?;
-                    buf
-                }
-                #[cfg(feature = "tokio1")]
-                {
-                    use tokio::{fs::File, io::AsyncReadExt};
-
-                    let mut file = File::open(&path).await?;
-                    let mut buf = Vec::new();
-                    file.read_to_end(&mut buf).await?;
-                    buf
-                }
-                #[cfg(feature = "async-std1")]
-                {
-                    use async_std::{fs::File, io::ReadExt};
-
-                    let mut file = File::open(&path).await?;
-                    let mut buf = Vec::new();
-                    file.read_to_end(&mut buf).await?;
-                    buf
-                }
-            };
+            let buf = DiskUtil::read(&path, None).await?;
 
             // Increment limits
             self.disk_limits.current_byte_count += buf.len();
@@ -403,7 +302,7 @@ impl FlushableStrategy for Hybrid {
 
         // Write to disk
         let path = self.cache_dir.join(key.to_key());
-        self.write_to_disk(&path, &entry.data).await?;
+        DiskUtil::write(&path, &entry.data).await?;
 
         // Increment limits
         self.disk_limits.current_byte_count += entry.byte_len;
@@ -422,7 +321,7 @@ mod tests {
     use std::fs::metadata;
 
     use super::{Hybrid, Limits, LIMIT_KIND_BYTE_DISK, LIMIT_KIND_ENTRY_DISK};
-    use crate::{async_test, test_utils::TempDir, Cache, Error};
+    use crate::{async_test, utils::test::TempDir, Cache, Error};
 
     async_test! {
         async fn test_default_strategy() {

@@ -21,17 +21,20 @@ macro_rules! reexport_strategy {
     };
 }
 
+// We wanna be able to use the right async runtime for the right feature,
+// but we also want to be able to use the same code for all of them.
 #[cfg(test)]
 #[macro_export]
 macro_rules! async_test {
     ($(async fn $name:ident () $body:block)+) => {
         $(
-            paste::paste! {
-                #[cfg_attr(feature = "blocking", tokio::test(flavor = "multi_thread"))]
-                #[cfg_attr(feature = "tokio1", tokio::test(flavor = "multi_thread"))]
-                #[cfg_attr(feature = "async-std1", async_std::test)]
-                async fn [<$name _ mt>] () $body
-            }
+            #[cfg_attr(any(
+                feature = "blocking",
+                feature = "tokio1",
+                all(feature = "implicit-blocking", not(feature = "async-std1")),
+            ), tokio::test(flavor = "multi_thread"))]
+            #[cfg_attr(feature = "async-std1", async_std::test)]
+            async fn $name () $body
         )+
     };
 }

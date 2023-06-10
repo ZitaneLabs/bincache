@@ -5,7 +5,8 @@ edition = "2021"
 description = "ZitaneLabs binary cache."
 
 [features]
-default = []
+default = ["implicit-blocking"]
+implicit-blocking = []
 blocking = []
 tokio1 = ["dep:tokio"]
 async-std1 = ["dep:async-std"]

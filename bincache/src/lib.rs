@@ -52,7 +52,12 @@
 //! bincache is licensed under the MIT license.
 //!
 
-#[cfg(not(any(feature = "blocking", feature = "tokio1", feature = "async-std1")))]
+#[cfg(not(any(
+    feature = "implicit-blocking",
+    feature = "blocking",
+    feature = "tokio1",
+    feature = "async-std1"
+)))]
 compile_error!(
     "Cannot run without an async runtime.\nPlease enable one of the following features: [blocking, tokio1, async-std1]."
 );
@@ -64,17 +69,16 @@ compile_error!(
 ))]
 compile_error!("Cannot enable multiple async runtime features at the same time.");
 
-#[cfg(test)]
-mod test_utils;
-
 mod builder;
 mod cache;
 mod error;
 mod macros;
 mod strategies;
 mod traits;
+mod utils;
 
 pub(crate) use error::Result;
+pub(crate) use utils::disk_util as DiskUtil;
 
 reexport_strategy!(Disk);
 reexport_strategy!(Hybrid);

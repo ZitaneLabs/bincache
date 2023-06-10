@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     traits::{CacheKey, CacheStrategy, RecoverableStrategy},
-    Result,
+    DiskUtil, Result,
 };
 
 const LIMIT_KIND_BYTE: &str = "Stored bytes";
@@ -52,83 +52,6 @@ impl Disk {
     }
 }
 
-impl Disk {
-    async fn read_from_disk(&self, entry: &Entry) -> Result<Vec<u8>> {
-        #[cfg(feature = "blocking")]
-        {
-            use std::{fs::File, io::Read};
-
-            let mut file = File::open(&entry.path)?;
-            let mut buf = Vec::with_capacity(entry.byte_len);
-            file.read_to_end(&mut buf)?;
-            Ok(buf)
-        }
-        #[cfg(feature = "tokio1")]
-        {
-            use tokio::{fs::File, io::AsyncReadExt};
-
-            let mut file = File::open(&entry.path).await?;
-            let mut buf = Vec::with_capacity(entry.byte_len);
-            file.read_to_end(&mut buf).await?;
-            Ok(buf)
-        }
-        #[cfg(feature = "async-std1")]
-        {
-            use async_std::{fs::File, io::ReadExt};
-
-            let mut file = File::open(&entry.path).await?;
-            let mut buf = Vec::with_capacity(entry.byte_len);
-            file.read_to_end(&mut buf).await?;
-            Ok(buf)
-        }
-    }
-
-    async fn write_to_disk(&self, path: impl AsRef<Path>, value: &[u8]) -> Result<()> {
-        #[cfg(feature = "blocking")]
-        {
-            use std::{fs::File, io::Write};
-
-            let mut file = File::create(path)?;
-            file.write_all(value)?;
-            file.sync_data()?;
-            Ok(())
-        }
-        #[cfg(feature = "tokio1")]
-        {
-            use tokio::{fs::File, io::AsyncWriteExt};
-
-            let mut file = File::create(path).await?;
-            file.write_all(value).await?;
-            file.sync_data().await?;
-            Ok(())
-        }
-        #[cfg(feature = "async-std1")]
-        {
-            use async_std::{fs::File, io::WriteExt};
-
-            let mut file = File::create(path.as_ref()).await?;
-            file.write_all(value).await?;
-            file.sync_data().await?;
-            Ok(())
-        }
-    }
-
-    async fn delete_from_disk(&self, entry: &Entry) -> Result<()> {
-        #[cfg(feature = "blocking")]
-        {
-            Ok(std::fs::remove_file(&entry.path)?)
-        }
-        #[cfg(feature = "tokio1")]
-        {
-            Ok(tokio::fs::remove_file(&entry.path).await?)
-        }
-        #[cfg(feature = "async-std1")]
-        {
-            Ok(async_std::fs::remove_file(&entry.path).await?)
-        }
-    }
-}
-
 #[async_trait]
 impl CacheStrategy for Disk {
     type CacheEntry = Entry;
@@ -161,7 +84,7 @@ impl CacheStrategy for Disk {
 
         // Write to disk
         let path = self.cache_dir.join(key.to_key());
-        self.write_to_disk(&path, value.as_ref()).await?;
+        DiskUtil::write(&path, value.as_ref()).await?;
 
         // Increment limits
         self.current_byte_count += byte_len;
@@ -171,18 +94,20 @@ impl CacheStrategy for Disk {
     }
 
     async fn get<'a>(&self, entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>> {
-        self.read_from_disk(entry).await.map(Cow::Owned)
+        DiskUtil::read(&entry.path, Some(entry.byte_len))
+            .await
+            .map(Cow::Owned)
     }
 
     async fn take(&mut self, entry: Self::CacheEntry) -> Result<Vec<u8>> {
-        let data = self.read_from_disk(&entry).await?;
+        let data = DiskUtil::read(&entry.path, Some(entry.byte_len)).await?;
         self.delete(entry).await?;
 
         Ok(data)
     }
 
     async fn delete(&mut self, entry: Self::CacheEntry) -> Result<()> {
-        self.delete_from_disk(&entry).await?;
+        DiskUtil::delete(&entry.path).await?;
 
         // Decrement limits
         self.current_byte_count -= entry.byte_len;
@@ -229,35 +154,7 @@ impl RecoverableStrategy for Disk {
             };
 
             // Read file
-            let buf = {
-                #[cfg(feature = "blocking")]
-                {
-                    use std::{fs::File, io::Read};
-
-                    let mut file = File::open(&path)?;
-                    let mut buf = Vec::new();
-                    file.read_to_end(&mut buf)?;
-                    buf
-                }
-                #[cfg(feature = "tokio1")]
-                {
-                    use tokio::{fs::File, io::AsyncReadExt};
-
-                    let mut file = File::open(&path).await?;
-                    let mut buf = Vec::new();
-                    file.read_to_end(&mut buf).await?;
-                    buf
-                }
-                #[cfg(feature = "async-std1")]
-                {
-                    use async_std::{fs::File, io::ReadExt};
-
-                    let mut file = File::open(&path).await?;
-                    let mut buf = Vec::new();
-                    file.read_to_end(&mut buf).await?;
-                    buf
-                }
-            };
+            let buf = DiskUtil::read(&path, None).await?;
 
             // Increment limits
             self.current_byte_count += buf.len();
@@ -281,7 +178,7 @@ impl RecoverableStrategy for Disk {
 #[cfg(test)]
 mod tests {
     use super::{Disk, LIMIT_KIND_BYTE, LIMIT_KIND_ENTRY};
-    use crate::{async_test, test_utils::TempDir, Cache, Error};
+    use crate::{async_test, utils::test::TempDir, Cache, Error};
 
     async_test! {
         async fn test_default() {

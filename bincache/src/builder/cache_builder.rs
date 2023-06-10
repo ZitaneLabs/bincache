@@ -76,18 +76,16 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn test_default() {
-        _ = CacheBuilder::default();
-    }
-
-    #[test]
-    fn test_type_aliased() {
-        type NoopCacheBuilder = CacheBuilder<Noop>;
-        _ = NoopCacheBuilder::new().build::<String>().unwrap();
-    }
-
     async_test! {
+        async fn test_default() {
+            _ = CacheBuilder::default();
+        }
+
+        async fn test_type_aliased() {
+            type NoopCacheBuilder = CacheBuilder<Noop>;
+            _ = NoopCacheBuilder::new().build::<String>().unwrap();
+        }
+
         async fn test_key_inference() {
             let mut cache = CacheBuilder::default().with_strategy(Noop).build().unwrap();
             cache.put("test".to_string(), vec![]).await.unwrap();
