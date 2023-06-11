@@ -1,4 +1,3 @@
-#[macro_export]
 macro_rules! reexport_strategy {
     ($strategy:ident) => {
         paste::paste! {
@@ -20,6 +19,8 @@ macro_rules! reexport_strategy {
         }
     };
 }
+
+pub(crate) use reexport_strategy;
 
 // We wanna be able to use the right async runtime for the right feature,
 // but we also want to be able to use the same code for all of them.

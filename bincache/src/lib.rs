@@ -81,9 +81,9 @@ mod utils;
 pub(crate) use error::Result;
 pub(crate) use utils::disk_util as DiskUtil;
 
-reexport_strategy!(Disk);
-reexport_strategy!(Hybrid);
-reexport_strategy!(Memory);
+macros::reexport_strategy!(Disk);
+macros::reexport_strategy!(Hybrid);
+macros::reexport_strategy!(Memory);
 
 // Export basic types
 pub use builder::CacheBuilder;
