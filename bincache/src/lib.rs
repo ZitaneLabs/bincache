@@ -14,7 +14,7 @@
 //!
 //! Add `bincache` to your `Cargo.toml` dependencies:
 //!
-//! ```bash,no_run
+//! ```sh,no_run
 //! cargo add bincache                            # for stdlib I/O
 //! cargo add bincache --features rt_tokio_1      # for tokio I/O
 //! cargo add bincache --features rt_async-std_1  # for async-std I/O
@@ -25,11 +25,12 @@
 //! ```
 //! use bincache::MemoryCacheBuilder;
 //!
-//! #[tokio::main(flavor = "current_thread")]
-//! async fn main() {
-//!     let mut cache = MemoryCacheBuilder::new().build().unwrap();
-//!     cache.put("key", b"value".to_vec()).await.unwrap();
-//! }
+//! # #[tokio::main(flavor = "current_thread")]
+//! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let mut cache = MemoryCacheBuilder::new().build()?;
+//! cache.put("key", b"value".to_vec()).await?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! Or use the generic `CacheBuilder` to create a cache with a custom strategy:
@@ -37,14 +38,14 @@
 //! ```
 //! use bincache::{Cache, CacheBuilder, MemoryStrategy};
 //!
-//! #[tokio::main(flavor = "current_thread")]
-//! async fn main() {
-//!     let mut cache = CacheBuilder::default()
-//!         .with_strategy(MemoryStrategy::default())
-//!         .build()
-//!         .unwrap();
-//!     cache.put("key", b"value".to_vec()).await.unwrap();
-//! }
+//! # #[tokio::main(flavor = "current_thread")]
+//! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let mut cache = CacheBuilder::default()
+//!     .with_strategy(MemoryStrategy::default())
+//!     .build()?;
+//! cache.put("key", b"value".to_vec()).await?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## License
