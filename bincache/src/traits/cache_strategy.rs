@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use std::borrow::Cow;
 
 use crate::Result;
@@ -5,24 +6,24 @@ use crate::Result;
 use super::CacheKey;
 
 /// A cache strategy.
+#[async_trait]
 pub trait CacheStrategy {
     /// This type is opaque to the cache.
     /// It is used to store information about each cached data entry.
     type CacheEntry;
 
     /// Put a value into the cache.
-    fn put<'a>(
-        &mut self,
-        key: &impl CacheKey,
-        value: impl Into<Cow<'a, [u8]>>,
-    ) -> Result<Self::CacheEntry>;
+    async fn put<'a, K, V>(&mut self, key: &K, value: V) -> Result<Self::CacheEntry>
+    where
+        K: CacheKey + Sync + Send,
+        V: Into<Cow<'a, [u8]>> + Send;
 
     /// Get a value from the cache.
-    fn get<'a>(&self, entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>>;
+    async fn get<'a>(&self, entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>>;
 
     /// Take a value from the cache, removing it.
-    fn take(&mut self, entry: Self::CacheEntry) -> Result<Vec<u8>>;
+    async fn take(&mut self, entry: Self::CacheEntry) -> Result<Vec<u8>>;
 
     /// Delete a value from the cache.
-    fn delete(&mut self, entry: Self::CacheEntry) -> Result<()>;
+    async fn delete(&mut self, entry: Self::CacheEntry) -> Result<()>;
 }

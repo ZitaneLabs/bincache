@@ -1,14 +1,12 @@
 //! # bincache
 //!
-//! `bincache` is a versatile and high-performance binary data caching library for Rust, designed with a focus on flexibility, efficiency, and ease of use. It enables developers to store, retrieve, and manage binary data using various caching strategies, catering to different storage needs and optimization requirements.
+//! `bincache` is a versatile, high-performance, async-first binary data caching library for Rust, designed with a focus on flexibility, efficiency, and ease of use. It enables developers to store, retrieve, and manage binary data using various caching strategies, catering to different storage needs and optimization requirements.
 //!
 //! The library offers several caching strategies out of the box:
 //!
 //! * **Memory**: This strategy stores all the data directly in memory. It is ideal for smaller sets of data that need to be accessed frequently and quickly.
 //! * **Disk**: This strategy saves data exclusively to disk storage. It is best suited for large data sets that don't need to be accessed as often or as swiftly.
-//! * **Hybrid**: This strategy is a combination of memory and disk storage. Frequently accessed data is stored in memory for fast access, while less frequently accessed data is moved to disk storage. This strategy provides a balanced approach for many use cases.
-//!
-//! Beyond these strategies, `bincache` provides various configuration options allowing for fine-tuned control over data storage and retrieval. These options include adjustable cache size, eviction policies, data expiry, and more.
+//! * **Hybrid**: This strategy is a combination of memory and disk storage. It stores data in memory first, and swaps to disk for files that don't fit the memory limit.
 //!
 //! This crate is intended to be versatile, serving as an efficient solution whether you're developing a high-load system that needs to reduce database pressure, an application that requires quick access to binary data, or any other situation where efficient caching strategies are vital.
 //!
@@ -17,7 +15,9 @@
 //! Add `bincache` to your `Cargo.toml` dependencies:
 //!
 //! ```bash,no_run
-//! cargo add bincache
+//! cargo add bincache                            # for stdlib I/O
+//! cargo add bincache --features rt_tokio_1      # for tokio I/O
+//! cargo add bincache --features rt_async-std_1  # for async-std I/O
 //! ```
 //!
 //! Then simply create a cache using the relevant `CacheBuilder`:
@@ -25,8 +25,11 @@
 //! ```
 //! use bincache::MemoryCacheBuilder;
 //!
-//! let mut cache = MemoryCacheBuilder::new().build().unwrap();
-//! cache.put("key", b"value".to_vec()).unwrap();
+//! #[tokio::main(flavor = "current_thread")]
+//! async fn main() {
+//!     let mut cache = MemoryCacheBuilder::new().build().unwrap();
+//!     cache.put("key", b"value".to_vec()).await.unwrap();
+//! }
 //! ```
 //!
 //! Or use the generic `CacheBuilder` to create a cache with a custom strategy:
@@ -34,22 +37,37 @@
 //! ```
 //! use bincache::{Cache, CacheBuilder, MemoryStrategy};
 //!
-//! let mut cache = CacheBuilder::default()
-//!     .with_strategy(MemoryStrategy::default())
-//!     .build()
-//!     .unwrap();
-//! cache.put("key", b"value".to_vec()).unwrap();
+//! #[tokio::main(flavor = "current_thread")]
+//! async fn main() {
+//!     let mut cache = CacheBuilder::default()
+//!         .with_strategy(MemoryStrategy::default())
+//!         .build()
+//!         .unwrap();
+//!     cache.put("key", b"value".to_vec()).await.unwrap();
+//! }
 //! ```
 //!
 //! ## License
 //!
 //! bincache is licensed under the MIT license.
 //!
-//! Happy coding with `bincache`!
-//!
 
-#[cfg(test)]
-mod test_utils;
+#[cfg(not(any(
+    feature = "implicit-blocking",
+    feature = "blocking",
+    feature = "rt_tokio_1",
+    feature = "rt_async-std_1"
+)))]
+compile_error!(
+    "Cannot run without an async runtime.\nPlease enable one of the following features: [blocking, rt_tokio_1, async-std1]."
+);
+
+#[cfg(any(
+    all(feature = "blocking", feature = "rt_tokio_1"),
+    all(feature = "blocking", feature = "rt_async-std_1"),
+    all(feature = "rt_tokio_1", feature = "rt_async-std_1")
+))]
+compile_error!("Cannot enable multiple async runtime features at the same time.");
 
 mod builder;
 mod cache;
@@ -57,8 +75,10 @@ mod error;
 mod macros;
 mod strategies;
 mod traits;
+mod utils;
 
 pub(crate) use error::Result;
+pub(crate) use utils::disk_util as DiskUtil;
 
 reexport_strategy!(Disk);
 reexport_strategy!(Hybrid);

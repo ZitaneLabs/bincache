@@ -12,12 +12,15 @@ use crate::Result;
 /// ```
 /// use bincache::{CacheBuilder, MemoryStrategy};
 ///
-/// let mut cache = CacheBuilder::default()
-///     .with_strategy(MemoryStrategy::default())
-///     .build()
-///     .unwrap();
+/// #[tokio::main(flavor = "current_thread")]
+/// async fn main() {
+///     let mut cache = CacheBuilder::default()
+///         .with_strategy(MemoryStrategy::default())
+///         .build()
+///         .unwrap();
 ///
-/// cache.put("key", b"value".to_vec()).unwrap();
+///     cache.put("key", b"value".to_vec()).await.unwrap();
+/// }
 /// ```
 #[derive(Debug)]
 pub struct CacheBuilder<S> {
@@ -54,7 +57,7 @@ where
     /// Build the [Cache].
     pub fn build<K>(self) -> Result<Cache<K, S>>
     where
-        K: CacheKey + Eq + Hash,
+        K: CacheKey + Eq + Hash + Sync + Send,
     {
         Ok(Cache::new(self.strategy.ok_or(Error::NoStrategy)?))
     }
@@ -69,24 +72,23 @@ impl Default for CacheBuilder<()> {
 
 #[cfg(test)]
 mod tests {
-    use crate::strategies::Noop;
+    use crate::{async_test, strategies::Noop};
 
     use super::*;
 
-    #[test]
-    fn test_default() {
-        _ = CacheBuilder::default();
-    }
+    async_test! {
+        async fn test_default() {
+            _ = CacheBuilder::default();
+        }
 
-    #[test]
-    fn test_type_aliased() {
-        type NoopCacheBuilder = CacheBuilder<Noop>;
-        _ = NoopCacheBuilder::new().build::<String>().unwrap();
-    }
+        async fn test_type_aliased() {
+            type NoopCacheBuilder = CacheBuilder<Noop>;
+            _ = NoopCacheBuilder::new().build::<String>().unwrap();
+        }
 
-    #[test]
-    fn test_key_inference() {
-        let mut cache = CacheBuilder::default().with_strategy(Noop).build().unwrap();
-        cache.put("test".to_string(), vec![]).unwrap();
+        async fn test_key_inference() {
+            let mut cache = CacheBuilder::default().with_strategy(Noop).build().unwrap();
+            cache.put("test".to_string(), vec![]).await.unwrap();
+        }
     }
 }

@@ -29,20 +29,23 @@ Bincache uses a strategy pattern to allow for different caching strategies:
 ## Usage
 
 1. Add `bincache` to your project:
-    ```plain,no_run
-    cargo add bincache
+    ```bash,no_run
+    cargo add bincache                            # use blocking I/O
+    cargo add bincache --features rt_tokio_1      # enable tokio 1.x support
+    cargo add bincache --features rt_async-std_1  # enable async-std 1.x support
     ```
 
 2. Create a `Cache` instance with your preferred strategy:
     ```rust
-    fn main() -> Result<(), Box<dyn std::error::Error>> {
+    #[tokio::main(flavor = "current_thread")]
+    async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut cache = bincache::MemoryCacheBuilder::new().build()?;
 
         // Put a key-value pair into the cache
-        cache.put(&"foo", b"foo".to_vec())?;
+        cache.put(&"foo", b"foo".to_vec()).await?;
 
         // Read the value back out
-        let foo = cache.get(&"foo")?;
+        let foo = cache.get(&"foo").await?;
 
         // Make sure it's the same
         assert_eq!(foo, b"foo".as_slice());
