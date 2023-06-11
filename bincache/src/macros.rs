@@ -30,10 +30,10 @@ macro_rules! async_test {
         $(
             #[cfg_attr(any(
                 feature = "blocking",
-                feature = "tokio1",
-                all(feature = "implicit-blocking", not(feature = "async-std1")),
+                feature = "rt_tokio_1",
+                all(feature = "implicit-blocking", not(feature = "rt_async-std_1")),
             ), tokio::test(flavor = "multi_thread"))]
-            #[cfg_attr(feature = "async-std1", async_std::test)]
+            #[cfg_attr(feature = "rt_async-std_1", async_std::test)]
             async fn $name () $body
         )+
     };

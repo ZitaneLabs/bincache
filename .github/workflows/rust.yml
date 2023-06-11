@@ -23,10 +23,10 @@ jobs:
       - run: curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ${CARGO_HOME:-~/.cargo}/bin
       - name: cargo test (blocking)
         run: cargo nextest run --release
-      - name: cargo test (tokio1)
-        run: cargo nextest run --release --features tokio1
-      - name: cargo test (async-std1)
-        run: cargo nextest run --release --features async-std1
+      - name: cargo test (tokio)
+        run: cargo nextest run --release --features rt_tokio_1
+      - name: cargo test (async-std)
+        run: cargo nextest run --release --features rt_async-std_1
       - name: doctests
         run: cargo test --doc
   clippy:
@@ -37,10 +37,10 @@ jobs:
       - run: rustup component add clippy
       - name: cargo clippy (blocking)
         run: cargo clippy
-      - name: cargo clippy (tokio1)
-        run: cargo clippy --features tokio1
-      - name: cargo clippy (async-std1)
-        run: cargo clippy --features async-std1
+      - name: cargo clippy (tokio)
+        run: cargo clippy --features rt_tokio_1
+      - name: cargo clippy (async-std)
+        run: cargo clippy --features rt_async-std_1
   rustfmt:
     runs-on: [ubuntu-latest]
     steps:

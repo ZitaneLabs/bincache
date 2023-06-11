@@ -9,7 +9,7 @@ pub async fn read(path: impl AsRef<Path>, byte_len: Option<usize>) -> Result<Vec
         feature = "blocking",
         all(
             feature = "implicit-blocking",
-            not(any(feature = "tokio1", feature = "async-std1")),
+            not(any(feature = "rt_tokio_1", feature = "rt_async-std_1")),
         )
     ))]
     {
@@ -19,7 +19,7 @@ pub async fn read(path: impl AsRef<Path>, byte_len: Option<usize>) -> Result<Vec
         file.read_to_end(&mut buf)?;
     }
 
-    #[cfg(feature = "tokio1")]
+    #[cfg(feature = "rt_tokio_1")]
     {
         use tokio::{fs::File, io::AsyncReadExt};
 
@@ -27,7 +27,7 @@ pub async fn read(path: impl AsRef<Path>, byte_len: Option<usize>) -> Result<Vec
         file.read_to_end(&mut buf).await?;
     }
 
-    #[cfg(feature = "async-std1")]
+    #[cfg(feature = "rt_async-std_1")]
     {
         use async_std::{fs::File, io::ReadExt};
 
@@ -43,7 +43,7 @@ pub async fn write(path: impl AsRef<Path>, value: &[u8]) -> Result<()> {
         feature = "blocking",
         all(
             feature = "implicit-blocking",
-            not(any(feature = "tokio1", feature = "async-std1")),
+            not(any(feature = "rt_tokio_1", feature = "rt_async-std_1")),
         )
     ))]
     {
@@ -54,7 +54,7 @@ pub async fn write(path: impl AsRef<Path>, value: &[u8]) -> Result<()> {
         file.sync_data()?;
     }
 
-    #[cfg(feature = "tokio1")]
+    #[cfg(feature = "rt_tokio_1")]
     {
         use tokio::{fs::File, io::AsyncWriteExt};
 
@@ -63,7 +63,7 @@ pub async fn write(path: impl AsRef<Path>, value: &[u8]) -> Result<()> {
         file.sync_data().await?;
     }
 
-    #[cfg(feature = "async-std1")]
+    #[cfg(feature = "rt_async-std_1")]
     {
         use async_std::{fs::File, io::WriteExt};
 
@@ -80,17 +80,17 @@ pub async fn delete(path: impl AsRef<Path>) -> Result<()> {
         feature = "blocking",
         all(
             feature = "implicit-blocking",
-            not(any(feature = "tokio1", feature = "async-std1")),
+            not(any(feature = "rt_tokio_1", feature = "rt_async-std_1")),
         )
     ))]
     {
         Ok(std::fs::remove_file(path)?)
     }
-    #[cfg(feature = "tokio1")]
+    #[cfg(feature = "rt_tokio_1")]
     {
         Ok(tokio::fs::remove_file(path).await?)
     }
-    #[cfg(feature = "async-std1")]
+    #[cfg(feature = "rt_async-std_1")]
     {
         Ok(async_std::fs::remove_file(path.as_ref()).await?)
     }

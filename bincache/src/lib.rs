@@ -6,9 +6,7 @@
 //!
 //! * **Memory**: This strategy stores all the data directly in memory. It is ideal for smaller sets of data that need to be accessed frequently and quickly.
 //! * **Disk**: This strategy saves data exclusively to disk storage. It is best suited for large data sets that don't need to be accessed as often or as swiftly.
-//! * **Hybrid**: This strategy is a combination of memory and disk storage. Frequently accessed data is stored in memory for fast access, while less frequently accessed data is moved to disk storage. This strategy provides a balanced approach for many use cases.
-//!
-//! Beyond these strategies, `bincache` provides various configuration options allowing for fine-tuned control over data storage and retrieval. These options include adjustable cache size, eviction policies, data expiry, and more.
+//! * **Hybrid**: This strategy is a combination of memory and disk storage. It stores data in memory first, and swaps to disk for files that don't fit the memory limit.
 //!
 //! This crate is intended to be versatile, serving as an efficient solution whether you're developing a high-load system that needs to reduce database pressure, an application that requires quick access to binary data, or any other situation where efficient caching strategies are vital.
 //!
@@ -17,7 +15,9 @@
 //! Add `bincache` to your `Cargo.toml` dependencies:
 //!
 //! ```bash,no_run
-//! cargo add bincache
+//! cargo add bincache                            # for stdlib I/O
+//! cargo add bincache --features rt_tokio_1      # for tokio I/O
+//! cargo add bincache --features rt_async-std_1  # for async-std I/O
 //! ```
 //!
 //! Then simply create a cache using the relevant `CacheBuilder`:
@@ -55,17 +55,17 @@
 #[cfg(not(any(
     feature = "implicit-blocking",
     feature = "blocking",
-    feature = "tokio1",
-    feature = "async-std1"
+    feature = "rt_tokio_1",
+    feature = "rt_async-std_1"
 )))]
 compile_error!(
-    "Cannot run without an async runtime.\nPlease enable one of the following features: [blocking, tokio1, async-std1]."
+    "Cannot run without an async runtime.\nPlease enable one of the following features: [blocking, rt_tokio_1, async-std1]."
 );
 
 #[cfg(any(
-    all(feature = "blocking", feature = "tokio1"),
-    all(feature = "blocking", feature = "async-std1"),
-    all(feature = "tokio1", feature = "async-std1")
+    all(feature = "blocking", feature = "rt_tokio_1"),
+    all(feature = "blocking", feature = "rt_async-std_1"),
+    all(feature = "rt_tokio_1", feature = "rt_async-std_1")
 ))]
 compile_error!("Cannot enable multiple async runtime features at the same time.");
 

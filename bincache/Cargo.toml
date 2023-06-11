@@ -8,8 +8,8 @@ description = "ZitaneLabs binary cache."
 default = ["implicit-blocking"]
 implicit-blocking = []
 blocking = []
-tokio1 = ["dep:tokio"]
-async-std1 = ["dep:async-std"]
+rt_tokio_1 = ["dep:tokio"]
+rt_async-std_1 = ["dep:async-std"]
 
 [dependencies]
 paste = "1.0.12"
