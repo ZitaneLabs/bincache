@@ -101,11 +101,11 @@ impl CacheStrategy for Memory {
 #[cfg(test)]
 mod tests {
     use super::{Memory, LIMIT_KIND_BYTE, LIMIT_KIND_ENTRY};
-    use crate::{async_test, Cache, Error};
+    use crate::{async_test, compression::MaybeCompressor, Cache, Error};
 
     async_test! {
         async fn test_default_strategy() {
-            let mut cache = Cache::new(Memory::default());
+            let mut cache = Cache::new(Memory::default(), MaybeCompressor::noop());
 
             cache.put("foo", b"foo".to_vec()).await.unwrap();
 
@@ -134,7 +134,7 @@ mod tests {
         }
 
         async fn test_strategy_with_byte_limit() {
-            let mut cache = Cache::new(Memory::new(Some(6), None));
+            let mut cache = Cache::new(Memory::new(Some(6), None), MaybeCompressor::noop());
 
             cache.put("foo", b"foo".to_vec()).await.unwrap();
             cache.put("bar", b"bar".to_vec()).await.unwrap();
@@ -153,7 +153,7 @@ mod tests {
         }
 
         async fn test_strategy_with_entry_limit() {
-            let mut cache = Cache::new(Memory::new(None, Some(3)));
+            let mut cache = Cache::new(Memory::new(None, Some(3)), MaybeCompressor::noop());
 
             cache.put("foo", b"foo".to_vec()).await.unwrap();
             cache.put("bar", b"bar".to_vec()).await.unwrap();

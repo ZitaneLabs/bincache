@@ -2,9 +2,9 @@ macro_rules! reexport_strategy {
     ($strategy:ident) => {
         paste::paste! {
             #[doc = concat!("A [Cache] using the [", stringify!($strategy), "Strategy].")]
-            pub type [<$strategy Cache>]<K> = $crate::Cache<K, $crate::strategies::$strategy>;
+            pub type [<$strategy Cache>]<K, C> = $crate::Cache<K, $crate::strategies::$strategy, C>;
             #[doc = concat!("A [CacheBuilder] using the [", stringify!($strategy), "Strategy].")]
-            pub type [<$strategy CacheBuilder>] = $crate::CacheBuilder<$crate::strategies::$strategy>;
+            pub type [<$strategy CacheBuilder>] = $crate::builder::CacheBuilderWithStrategy<$crate::strategies::$strategy>;
             pub use $crate::strategies::$strategy as [<$strategy Strategy>];
 
             const _: () = {

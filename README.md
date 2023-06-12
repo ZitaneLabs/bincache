@@ -39,7 +39,7 @@ Bincache uses a strategy pattern to allow for different caching strategies:
     ```rust
     #[tokio::main(flavor = "current_thread")]
     async fn main() -> Result<(), Box<dyn std::error::Error>> {
-        let mut cache = bincache::MemoryCacheBuilder::new().build()?;
+        let mut cache = bincache::MemoryCacheBuilder::default().build()?;
 
         // Put a key-value pair into the cache
         cache.put(&"foo", b"foo".to_vec()).await?;

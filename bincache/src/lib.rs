@@ -27,7 +27,7 @@
 //!
 //! # #[tokio::main(flavor = "current_thread")]
 //! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let mut cache = MemoryCacheBuilder::new().build()?;
+//! let mut cache = MemoryCacheBuilder::default().build()?;
 //! cache.put("key", b"value".to_vec()).await?;
 //! # Ok(())
 //! # }
@@ -72,6 +72,7 @@ compile_error!("Cannot enable multiple async runtime features at the same time."
 
 mod builder;
 mod cache;
+pub mod compression;
 pub mod error;
 mod macros;
 pub mod strategies;
