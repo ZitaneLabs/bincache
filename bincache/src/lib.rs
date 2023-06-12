@@ -72,11 +72,11 @@ compile_error!("Cannot enable multiple async runtime features at the same time."
 
 mod builder;
 mod cache;
-mod error;
+pub mod error;
 mod macros;
-mod strategies;
-mod traits;
-mod utils;
+pub mod strategies;
+pub mod traits;
+pub mod utils;
 
 pub(crate) use error::Result;
 pub(crate) use utils::disk_util as DiskUtil;

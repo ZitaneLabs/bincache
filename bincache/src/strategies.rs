@@ -4,7 +4,7 @@ mod memory;
 mod noop;
 
 pub use disk::Disk;
-pub use hybrid::Hybrid;
+pub use hybrid::{Hybrid, Limits};
 pub use memory::Memory;
 
 #[cfg(test)]
