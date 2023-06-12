@@ -1,9 +1,8 @@
 use std::hash::Hash;
 
-use super::Error;
-
 use crate::cache::Cache;
-use crate::traits::{CacheKey, CacheStrategy};
+use crate::compression::{MaybeCompressor, Noop};
+use crate::traits::{CacheKey, CacheStrategy, CompressionStrategy};
 use crate::Result;
 
 /// A builder for creating a new [Cache].
@@ -22,51 +21,128 @@ use crate::Result;
 ///     cache.put("key", b"value".to_vec()).await.unwrap();
 /// }
 /// ```
-#[derive(Debug)]
-pub struct CacheBuilder<S> {
-    strategy: Option<S>,
+#[derive(Debug, Default)]
+pub struct CacheBuilder;
+
+pub struct CacheBuilderWithStrategy<S> {
+    strategy: S,
 }
 
-impl<S> CacheBuilder<S> {
-    /// Set the [CacheStrategy].
-    pub fn with_strategy<_S>(self, strategy: _S) -> CacheBuilder<_S>
-    where
-        _S: CacheStrategy,
-    {
-        CacheBuilder {
-            strategy: Some(strategy),
-        }
-    }
-}
-
-impl<S> CacheBuilder<S>
+impl<S> Default for CacheBuilderWithStrategy<S>
 where
-    S: CacheStrategy + Default,
+    S: Default + CacheStrategy,
 {
-    pub fn new() -> CacheBuilder<S> {
-        CacheBuilder {
-            strategy: Some(S::default()),
+    fn default() -> Self {
+        CacheBuilderWithStrategy {
+            strategy: S::default(),
         }
     }
 }
 
-impl<S> CacheBuilder<S>
+pub struct CacheBuilderWithCompression<C> {
+    compressor: C,
+}
+
+impl<C> Default for CacheBuilderWithCompression<C>
+where
+    C: Default + CompressionStrategy,
+{
+    fn default() -> Self {
+        CacheBuilderWithCompression {
+            compressor: C::default(),
+        }
+    }
+}
+
+pub struct CacheBuilderWithCompressionAndStrategy<S, C> {
+    strategy: S,
+    compressor: C,
+}
+
+impl<S, C> Default for CacheBuilderWithCompressionAndStrategy<S, C>
+where
+    S: Default + CacheStrategy,
+    C: Default + CompressionStrategy,
+{
+    fn default() -> Self {
+        CacheBuilderWithCompressionAndStrategy {
+            strategy: S::default(),
+            compressor: C::default(),
+        }
+    }
+}
+
+impl CacheBuilder {
+    /// Add a strategy to the cache
+    pub fn with_strategy<S>(self, strategy: S) -> CacheBuilderWithStrategy<S>
+    where
+        S: CacheStrategy,
+    {
+        CacheBuilderWithStrategy { strategy }
+    }
+
+    /// Add a compression algorithm to the cache
+    pub fn with_compression<C>(self, compressor: C) -> CacheBuilderWithCompression<C>
+    where
+        C: CompressionStrategy,
+    {
+        CacheBuilderWithCompression { compressor }
+    }
+}
+
+impl<C> CacheBuilderWithCompression<C> {
+    /// Add a strategy to the cache
+    pub fn with_strategy<S>(self, strategy: S) -> CacheBuilderWithCompressionAndStrategy<S, C> {
+        {
+            CacheBuilderWithCompressionAndStrategy {
+                strategy,
+                compressor: self.compressor,
+            }
+        }
+    }
+}
+
+impl<S> CacheBuilderWithStrategy<S>
 where
     S: CacheStrategy,
 {
-    /// Build the [Cache].
-    pub fn build<K>(self) -> Result<Cache<K, S>>
+    /// Add a compression algorithm to the cache
+    pub fn with_compression<C>(self, compressor: C) -> CacheBuilderWithCompressionAndStrategy<S, C>
+    where
+        C: CompressionStrategy,
+    {
+        CacheBuilderWithCompressionAndStrategy {
+            strategy: self.strategy,
+            compressor,
+        }
+    }
+
+    /// Build the cache without using compression
+    pub fn build<K>(self) -> Result<Cache<K, S, Noop>>
     where
         K: CacheKey + Eq + Hash + Sync + Send,
     {
-        Ok(Cache::new(self.strategy.ok_or(Error::NoStrategy)?))
+        Ok(Cache::new(
+            self.strategy,
+            MaybeCompressor::<Noop>::Passthrough,
+        ))
     }
 }
 
-impl Default for CacheBuilder<()> {
-    /// Create a new [CacheBuilder] with the default configuration.
-    fn default() -> CacheBuilder<()> {
-        CacheBuilder { strategy: None }
+impl<S, C> CacheBuilderWithCompressionAndStrategy<S, C>
+where
+    S: CacheStrategy,
+    C: CompressionStrategy,
+{
+    pub fn build<K>(self) -> Result<Cache<K, S, C>>
+    where
+        K: CacheKey + Eq + Hash + Sync + Send,
+        C: CompressionStrategy + Sync + Send,
+    {
+        Ok(Cache::new(
+            self.strategy,
+            MaybeCompressor::Compressor(self.compressor),
+        ))
     }
 }
 
@@ -82,8 +158,8 @@ mod tests {
         }
 
         async fn test_type_aliased() {
-            type NoopCacheBuilder = CacheBuilder<Noop>;
-            _ = NoopCacheBuilder::new().build::<String>().unwrap();
+            type NoopCacheBuilder = CacheBuilderWithStrategy<Noop>;
+            _ = NoopCacheBuilder::default().build::<String>().unwrap();
         }
 
         async fn test_key_inference() {

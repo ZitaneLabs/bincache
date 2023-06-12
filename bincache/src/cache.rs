@@ -1,5 +1,8 @@
 use crate::{
-    traits::{CacheKey, CacheStrategy, FlushableStrategy, RecoverableStrategy},
+    compression::MaybeCompressor,
+    traits::{
+        CacheKey, CacheStrategy, CompressionStrategy, FlushableStrategy, RecoverableStrategy,
+    },
     Result,
 };
 
@@ -7,25 +10,32 @@ use std::{borrow::Cow, collections::HashMap, hash::Hash};
 
 /// Binary cache.
 #[derive(Debug)]
-pub struct Cache<K, S>
+pub struct Cache<K, S, C>
 where
     K: CacheKey + Eq + Hash,
     S: CacheStrategy,
+    C: CompressionStrategy + Sync + Send,
 {
     data: HashMap<K, S::CacheEntry>,
     strategy: S,
+    compressor: MaybeCompressor<C>,
 }
 
-impl<K, S> Cache<K, S>
+impl<K, S, C> Cache<K, S, C>
 where
     K: CacheKey + Eq + Hash + Sync + Send,
     S: CacheStrategy,
+    C: CompressionStrategy + Sync + Send,
 {
     /// Create a new [Cache].
-    pub fn new(strategy: S) -> Cache<K, S> {
+    pub fn new(strategy: S, compressor: MaybeCompressor<C>) -> Cache<K, S, C>
+    where
+        C: CompressionStrategy + Sync + Send,
+    {
         Cache {
             data: HashMap::new(),
             strategy,
+            compressor,
         }
     }
 
@@ -34,6 +44,8 @@ where
     where
         V: Into<Cow<'a, [u8]>> + Send,
     {
+        let value: Cow<'_, [u8]> = self.compressor.compress(value.into()).await?;
+
         let entry = self.strategy.put(&key, value).await?;
         self.data.insert(key, entry);
         Ok(())
@@ -42,13 +54,15 @@ where
     /// Get an entry from the cache.
     pub async fn get(&self, key: K) -> Result<Cow<'_, [u8]>> {
         let entry = self.data.get(&key).ok_or(crate::Error::KeyNotFound)?;
-        self.strategy.get(entry).await
+        let value = self.strategy.get(entry).await?;
+        self.compressor.decompress(value).await
     }
 
     /// Take an entry from the cache, removing it.
     pub async fn take(&mut self, key: K) -> Result<Vec<u8>> {
         let entry = self.data.remove(&key).ok_or(crate::Error::KeyNotFound)?;
-        self.strategy.take(entry).await
+        let value = self.strategy.take(entry).await?;
+        Ok(self.compressor.decompress(value.into()).await?.into_owned())
     }
 
     /// Delete an entry from the cache.
@@ -63,10 +77,11 @@ where
     }
 }
 
-impl<K, S> Cache<K, S>
+impl<K, S, C> Cache<K, S, C>
 where
     K: CacheKey + Eq + Hash + Send,
     S: RecoverableStrategy + Send,
+    C: CompressionStrategy + Sync + Send,
 {
     /// Recover the cache from a previous state.
     /// Returns the number of recovered items.
@@ -94,10 +109,11 @@ where
     }
 }
 
-impl<K, S> Cache<K, S>
+impl<K, S, C> Cache<K, S, C>
 where
     K: CacheKey + Eq + Hash + ToOwned<Owned = K> + Sync + Send,
     S: FlushableStrategy,
+    C: CompressionStrategy + Sync + Send,
 {
     /// Flush entries to an underlying non-volatile storage.
     /// Returns the number of flushed items.

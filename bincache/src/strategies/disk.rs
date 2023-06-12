@@ -178,12 +178,12 @@ impl RecoverableStrategy for Disk {
 #[cfg(test)]
 mod tests {
     use super::{Disk, LIMIT_KIND_BYTE, LIMIT_KIND_ENTRY};
-    use crate::{async_test, utils::test::TempDir, Cache, Error};
+    use crate::{async_test, compression::MaybeCompressor, utils::test::TempDir, Cache, Error};
 
     async_test! {
         async fn test_default() {
             let temp_dir = TempDir::new();
-            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None));
+            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None), MaybeCompressor::noop());
 
             cache.put("foo", b"foo".to_vec()).await.unwrap();
 
@@ -213,7 +213,7 @@ mod tests {
 
         async fn test_strategy_with_byte_limit() {
             let temp_dir = TempDir::new();
-            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), Some(6), None));
+            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), Some(6), None), MaybeCompressor::noop());
 
             let foo_data = b"foo".to_vec();
             let bar_data = b"bar".to_vec();
@@ -242,7 +242,7 @@ mod tests {
 
         async fn test_strategy_with_entry_limit() {
             let temp_dir = TempDir::new();
-            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, Some(3)));
+            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, Some(3)), MaybeCompressor::noop());
 
             cache.put("foo", b"foo".to_vec()).await.unwrap();
             cache.put("bar", b"bar".to_vec()).await.unwrap();
@@ -266,7 +266,7 @@ mod tests {
 
             // populate cache
             {
-                let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None));
+                let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None), MaybeCompressor::noop());
 
                 cache.put("foo", b"foo".to_vec()).await.unwrap();
                 cache.put("bar", b"bar".to_vec()).await.unwrap();
@@ -274,7 +274,7 @@ mod tests {
 
             // recover cache
             {
-                let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None));
+                let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None), MaybeCompressor::noop());
                 let recovered_items = cache
                     .recover(|k| Some(k.to_string()))
                     .await
