@@ -71,6 +71,11 @@ where
         self.strategy.delete(entry).await
     }
 
+    /// Check if an entry exists.
+    pub fn exists(&self, key: K) -> bool {
+        self.data.contains_key(&key)
+    }
+
     #[cfg(test)]
     pub(crate) fn strategy(&self) -> &S {
         &self.strategy
