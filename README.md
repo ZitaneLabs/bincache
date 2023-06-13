@@ -16,6 +16,7 @@ The API is not yet stabilized, so expect breaking changes.
 - Simple API
 - Flexible cache sizing, limiting, and eviction
 - Multiple cache strategies for different use cases
+- Support for cache compression
 - Best-effort cache recovery
 
 ### Cache Strategies
@@ -54,3 +55,14 @@ Bincache uses a strategy pattern to allow for different caching strategies:
     }
     ```
 3. That's it!
+
+## Features
+
+- `blocking` - Enables blocking stdlib I/O
+- `rt_tokio_1` - Enables tokio 1.x support
+- `rt_async-std_1` - Enables async-std 1.x support
+- `comp_zstd` - Enables zstd compression support
+
+> By default, we enable a "soft" `implicit-blocking` feature, which only uses blocking I/O if no other runtime feature is enabled.
+>
+> You can explicitly opt-in to blocking I/O by enabling the `blocking` feature, which will disallow the use of `rt_tokio_1` and `rt_async-std_1`.

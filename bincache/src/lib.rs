@@ -8,6 +8,11 @@
 //! * **Disk**: This strategy saves data exclusively to disk storage. It is best suited for large data sets that don't need to be accessed as often or as swiftly.
 //! * **Hybrid**: This strategy is a combination of memory and disk storage. It stores data in memory first, and swaps to disk for files that don't fit the memory limit.
 //!
+//! We also offer opt-in support for data compression:
+//!
+//! * **zstd**: Enabled using the `comp_zstd` feature flag.
+//! * more to come...
+//!
 //! This crate is intended to be versatile, serving as an efficient solution whether you're developing a high-load system that needs to reduce database pressure, an application that requires quick access to binary data, or any other situation where efficient caching strategies are vital.
 //!
 //! ## Usage
@@ -20,7 +25,9 @@
 //! cargo add bincache --features rt_async-std_1  # for async-std I/O
 //! ```
 //!
-//! Then simply create a cache using the relevant `CacheBuilder`:
+//! ## Examples
+//!
+//! Getting started quickly using ready-made aliased cache builders:
 //!
 //! ```
 //! use bincache::MemoryCacheBuilder;
@@ -33,7 +40,7 @@
 //! # }
 //! ```
 //!
-//! Or use the generic `CacheBuilder` to create a cache with a custom strategy:
+//! More advanced usage, using the builder directly:
 //!
 //! ```
 //! use bincache::{Cache, CacheBuilder, MemoryStrategy};
