@@ -34,18 +34,21 @@ impl LimitEvaluation {
 }
 
 /// A cache entry stored in memory.
+#[derive(Debug)]
 pub struct MemoryEntry {
     data: Vec<u8>,
     byte_len: usize,
 }
 
 /// A cache entry stored on disk.
+#[derive(Debug)]
 pub struct DiskEntry {
     path: PathBuf,
     byte_len: usize,
 }
 
 /// A hybrid cache entry.
+#[derive(Debug)]
 pub enum Entry {
     Memory(MemoryEntry),
     Disk(DiskEntry),

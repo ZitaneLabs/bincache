@@ -13,6 +13,7 @@ use crate::{
 const LIMIT_KIND_BYTE: &str = "Stored bytes";
 const LIMIT_KIND_ENTRY: &str = "Stored entries";
 
+#[derive(Debug)]
 pub struct Entry {
     path: PathBuf,
     byte_len: usize,

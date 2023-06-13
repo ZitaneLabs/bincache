@@ -9,6 +9,7 @@ use crate::{
 const LIMIT_KIND_BYTE: &str = "Stored bytes";
 const LIMIT_KIND_ENTRY: &str = "Stored entries";
 
+#[derive(Debug)]
 pub struct Entry {
     data: Vec<u8>,
     byte_len: usize,
