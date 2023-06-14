@@ -12,7 +12,8 @@ use crate::{noop::Noop, Cache, CacheKey, CacheStrategy, CompressionStrategy, Res
 /// async fn main() {
 ///     let mut cache = CacheBuilder::default()
 ///         .with_strategy(MemoryStrategy::default())
-///         .build().await.unwrap();
+///         .build().await
+///         .unwrap();
 ///
 ///     cache.put("key", b"value".to_vec()).await.unwrap();
 /// }
