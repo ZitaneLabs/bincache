@@ -13,13 +13,24 @@ rt_async-std_1 = ["dep:async-std", "async-compression/futures-io"]
 comp_zstd = ["async-compression/zstd"]
 
 [dependencies]
-paste = "1.0.12"
-thiserror = "1.0.40"
-async-trait = { version = "0.1" }
-tokio = { version = "1", features = ["rt", "fs", "io-util"], optional = true }
-async-std = { version = "1", optional = true }
-async-compression = {version = "0.4.0"}
-futures-util = { version = "0.3", features = ["io"], optional = true }
+paste = "1"
+thiserror = "1"
+async-trait = "0.1"
+async-compression = "0.4"
+
+[dependencies.tokio]
+version = "1"
+features = ["rt", "fs", "io-util"]
+optional = true
+
+[dependencies.async-std]
+version = "1"
+optional = true
+
+[dependencies.futures-util]
+version = "0.3"
+features = ["io"]
+optional = true
 
 [dev-dependencies]
 uuid = { version = "1.3.3", features = ["v4"] }
