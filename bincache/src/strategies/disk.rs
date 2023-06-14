@@ -23,7 +23,7 @@ pub struct Entry {
 ///
 /// This strategy stores entries on disk. It can be configured to limit the
 /// number of bytes and/or entries that can be stored.
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Disk {
     /// The directory where entries are stored.
     cache_dir: PathBuf,
@@ -53,9 +53,25 @@ impl Disk {
     }
 }
 
+impl Default for Disk {
+    fn default() -> Self {
+        Self {
+            cache_dir: PathBuf::from("cache"),
+            byte_limit: None,
+            entry_limit: None,
+            current_byte_count: 0,
+            current_entry_count: 0,
+        }
+    }
+}
+
 #[async_trait]
 impl CacheStrategy for Disk {
     type CacheEntry = Entry;
+
+    async fn setup(&mut self) -> Result<()> {
+        Ok(DiskUtil::create_dir(&self.cache_dir).await?)
+    }
 
     async fn put<'a, K, V>(&mut self, key: &K, value: V) -> Result<Self::CacheEntry>
     where
@@ -184,7 +200,7 @@ mod tests {
     async_test! {
         async fn test_default() {
             let temp_dir = TempDir::new();
-            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None), NO_COMPRESSION);
+            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None), NO_COMPRESSION).await.unwrap();
 
             cache.put("foo", b"foo".to_vec()).await.unwrap();
 
@@ -214,7 +230,7 @@ mod tests {
 
         async fn test_strategy_with_byte_limit() {
             let temp_dir = TempDir::new();
-            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), Some(6), None), NO_COMPRESSION);
+            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), Some(6), None), NO_COMPRESSION).await.unwrap();
 
             let foo_data = b"foo".to_vec();
             let bar_data = b"bar".to_vec();
@@ -243,7 +259,7 @@ mod tests {
 
         async fn test_strategy_with_entry_limit() {
             let temp_dir = TempDir::new();
-            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, Some(3)), NO_COMPRESSION);
+            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, Some(3)), NO_COMPRESSION).await.unwrap();
 
             cache.put("foo", b"foo".to_vec()).await.unwrap();
             cache.put("bar", b"bar".to_vec()).await.unwrap();
@@ -267,7 +283,7 @@ mod tests {
 
             // populate cache
             {
-                let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None), NO_COMPRESSION);
+                let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None), NO_COMPRESSION).await.unwrap();
 
                 cache.put("foo", b"foo".to_vec()).await.unwrap();
                 cache.put("bar", b"bar".to_vec()).await.unwrap();
@@ -275,7 +291,7 @@ mod tests {
 
             // recover cache
             {
-                let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None), NO_COMPRESSION);
+                let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None), NO_COMPRESSION).await.unwrap();
                 let recovered_items = cache
                     .recover(|k| Some(k.to_string()))
                     .await

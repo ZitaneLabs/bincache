@@ -12,6 +12,11 @@ pub trait CacheStrategy {
     /// It is used to store information about each cached data entry.
     type CacheEntry;
 
+    /// Setup the cache.
+    async fn setup(&mut self) -> Result<()> {
+        Ok(())
+    }
+
     /// Put a value into the cache.
     async fn put<'a, K, V>(&mut self, key: &K, value: V) -> Result<Self::CacheEntry>
     where

@@ -34,7 +34,7 @@
 //!
 //! # #[tokio::main(flavor = "current_thread")]
 //! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let mut cache = MemoryCacheBuilder::default().build();
+//! let mut cache = MemoryCacheBuilder::default().build().await?;
 //! cache.put("key", b"value".to_vec()).await?;
 //! # Ok(())
 //! # }
@@ -49,7 +49,7 @@
 //! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let mut cache = CacheBuilder::default()
 //!     .with_strategy(MemoryStrategy::default())
-//!     .build();
+//!     .build().await?;
 //! cache.put("key", b"value".to_vec()).await?;
 //! # Ok(())
 //! # }

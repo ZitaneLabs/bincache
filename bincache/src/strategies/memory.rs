@@ -103,7 +103,7 @@ mod tests {
 
     async_test! {
         async fn test_default_strategy() {
-            let mut cache = Cache::new(Memory::default(), NO_COMPRESSION);
+            let mut cache = Cache::new(Memory::default(), NO_COMPRESSION).await.unwrap();
 
             cache.put("foo", b"foo".to_vec()).await.unwrap();
 
@@ -132,7 +132,7 @@ mod tests {
         }
 
         async fn test_strategy_with_byte_limit() {
-            let mut cache = Cache::new(Memory::new(Some(6), None), NO_COMPRESSION);
+            let mut cache = Cache::new(Memory::new(Some(6), None), NO_COMPRESSION).await.unwrap();
 
             cache.put("foo", b"foo".to_vec()).await.unwrap();
             cache.put("bar", b"bar".to_vec()).await.unwrap();
@@ -151,7 +151,7 @@ mod tests {
         }
 
         async fn test_strategy_with_entry_limit() {
-            let mut cache = Cache::new(Memory::new(None, Some(3)), NO_COMPRESSION);
+            let mut cache = Cache::new(Memory::new(None, Some(3)), NO_COMPRESSION).await.unwrap();
 
             cache.put("foo", b"foo".to_vec()).await.unwrap();
             cache.put("bar", b"bar".to_vec()).await.unwrap();
