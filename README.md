@@ -11,7 +11,7 @@
 **The library is not yet published to crates.io.**<br>
 The API is not yet stabilized, so expect breaking changes.
 
-## Features
+## Overview
 
 - Simple API
 - Flexible cache sizing, limiting, and eviction
@@ -27,6 +27,19 @@ Bincache uses a strategy pattern to allow for different caching strategies:
 - [x] Hybrid cache (in-memory + disk-backed)
 - [x] Custom strategies possible through `CacheStrategy`
 
+### Compression Algorithms
+Bincache supports various compression algorithms:
+
+- [x] Zstandard (feature: `comp_zstd`)
+- [x] Custom algorithms possible through `CompressionStrategy`
+
+### Async Runtimes
+Bincache supports multiple async runtimes:
+
+- [x] Futures-compatible (default)
+- [x] Tokio 1.x (feature: `rt_tokio_1`)
+- [x] Async-Std 1.x (feature: `rt_async-std_1`)
+
 ## Usage
 
 1. Add `bincache` to your project:
@@ -40,7 +53,7 @@ Bincache uses a strategy pattern to allow for different caching strategies:
     ```rust
     #[tokio::main(flavor = "current_thread")]
     async fn main() -> Result<(), Box<dyn std::error::Error>> {
-        let mut cache = bincache::MemoryCacheBuilder::default().build()?;
+        let mut cache = bincache::MemoryCacheBuilder::default().build();
 
         // Put a key-value pair into the cache
         cache.put(&"foo", b"foo".to_vec()).await?;
@@ -56,7 +69,7 @@ Bincache uses a strategy pattern to allow for different caching strategies:
     ```
 3. That's it!
 
-## Features
+## Library Features
 
 - `blocking` - Enables blocking stdlib I/O
 - `rt_tokio_1` - Enables tokio 1.x support
