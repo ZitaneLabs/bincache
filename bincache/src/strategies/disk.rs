@@ -70,7 +70,7 @@ impl CacheStrategy for Disk {
     type CacheEntry = Entry;
 
     async fn setup(&mut self) -> Result<()> {
-        Ok(DiskUtil::create_dir(&self.cache_dir).await?)
+        DiskUtil::create_dir(&self.cache_dir).await
     }
 
     async fn put<'a, K, V>(&mut self, key: &K, value: V) -> Result<Self::CacheEntry>
