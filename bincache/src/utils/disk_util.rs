@@ -2,6 +2,30 @@ use std::path::Path;
 
 use crate::Result;
 
+pub async fn create_dir(path: impl AsRef<Path>) -> Result<()> {
+    #[cfg(any(
+        feature = "blocking",
+        all(
+            feature = "implicit-blocking",
+            not(any(feature = "rt_tokio_1", feature = "rt_async-std_1")),
+        )
+    ))]
+    {
+        use std::fs::create_dir_all;
+        Ok(create_dir_all(&path)?)
+    }
+    #[cfg(feature = "rt_tokio_1")]
+    {
+        use tokio::fs::create_dir_all;
+        Ok(create_dir_all(&path).await?)
+    }
+    #[cfg(feature = "rt_async-std_1")]
+    {
+        use async_std::fs::create_dir_all;
+        Ok(create_dir_all(path.as_ref()).await?)
+    }
+}
+
 pub async fn read(path: impl AsRef<Path>, byte_len: Option<usize>) -> Result<Vec<u8>> {
     let mut buf = Vec::with_capacity(byte_len.unwrap_or(0));
 
@@ -48,7 +72,6 @@ pub async fn write(path: impl AsRef<Path>, value: &[u8]) -> Result<()> {
     ))]
     {
         use std::{fs::File, io::Write};
-
         let mut file = File::create(path)?;
         file.write_all(value)?;
         file.sync_data()?;

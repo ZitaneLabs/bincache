@@ -1,6 +1,6 @@
 use std::hash::Hash;
 
-use crate::{noop::Noop, Cache, CacheKey, CacheStrategy, CompressionStrategy};
+use crate::{noop::Noop, Cache, CacheKey, CacheStrategy, CompressionStrategy, Result};
 
 /// A builder for creating a new [Cache].
 ///
@@ -12,7 +12,8 @@ use crate::{noop::Noop, Cache, CacheKey, CacheStrategy, CompressionStrategy};
 /// async fn main() {
 ///     let mut cache = CacheBuilder::default()
 ///         .with_strategy(MemoryStrategy::default())
-///         .build();
+///         .build().await
+///         .unwrap();
 ///
 ///     cache.put("key", b"value".to_vec()).await.unwrap();
 /// }
@@ -100,7 +101,7 @@ impl<C> CacheBuilderWithCompression<C> {
 
 impl<S> CacheBuilderWithStrategy<S>
 where
-    S: CacheStrategy,
+    S: CacheStrategy + Send,
 {
     /// Add a compression algorithm to the cache
     pub fn with_compression<C>(self, compressor: C) -> CacheBuilderWithCompressionAndStrategy<S, C>
@@ -114,25 +115,25 @@ where
     }
 
     /// Build the cache without using compression
-    pub fn build<K>(self) -> Cache<K, S, Noop>
+    pub async fn build<K>(self) -> Result<Cache<K, S, Noop>>
     where
         K: CacheKey + Eq + Hash + Sync + Send,
     {
-        Cache::new(self.strategy, None)
+        Cache::new(self.strategy, None).await
     }
 }
 
 impl<S, C> CacheBuilderWithCompressionAndStrategy<S, C>
 where
-    S: CacheStrategy,
+    S: CacheStrategy + Send,
     C: CompressionStrategy,
 {
-    pub fn build<K>(self) -> Cache<K, S, C>
+    pub async fn build<K>(self) -> Result<Cache<K, S, C>>
     where
         K: CacheKey + Eq + Hash + Sync + Send,
         C: CompressionStrategy + Sync + Send,
     {
-        Cache::new(self.strategy, Some(self.compressor))
+        Cache::new(self.strategy, Some(self.compressor)).await
     }
 }
 
@@ -153,7 +154,7 @@ mod tests {
         }
 
         async fn test_key_inference() {
-            let mut cache = CacheBuilder::default().with_strategy(Noop).build();
+            let mut cache = CacheBuilder::default().with_strategy(Noop).build().await.unwrap();
             cache.put("test".to_string(), vec![]).await.unwrap();
         }
     }

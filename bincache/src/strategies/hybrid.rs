@@ -93,7 +93,7 @@ impl Limits {
 ///
 /// This strategy stores entries on memory and flushed entries to disk if memory doesn't suffice.
 /// It can be configured to limit the number of bytes and/or entries that can be stored.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Hybrid {
     /// The directory where entries are stored.
     cache_dir: PathBuf,
@@ -101,6 +101,16 @@ pub struct Hybrid {
     memory_limits: Limits,
     /// Disk usage limits.
     disk_limits: Limits,
+}
+
+impl Default for Hybrid {
+    fn default() -> Self {
+        Self {
+            cache_dir: PathBuf::from("cache"),
+            memory_limits: Limits::default(),
+            disk_limits: Limits::default(),
+        }
+    }
 }
 
 impl Hybrid {
@@ -120,6 +130,10 @@ impl Hybrid {
 #[async_trait]
 impl CacheStrategy for Hybrid {
     type CacheEntry = Entry;
+
+    async fn setup(&mut self) -> Result<()> {
+        DiskUtil::create_dir(&self.cache_dir).await
+    }
 
     async fn put<'a, K, V>(&mut self, key: &K, value: V) -> Result<Self::CacheEntry>
     where
@@ -329,7 +343,7 @@ mod tests {
     async_test! {
         async fn test_default_strategy() {
             // We don't need a temp dir here, because we don't write to disk
-            let mut cache = Cache::new(Hybrid::default(), NO_COMPRESSION);
+            let mut cache = Cache::new(Hybrid::default(), NO_COMPRESSION).await.unwrap();
 
             cache.put("foo", b"foo".to_vec()).await.unwrap();
 
@@ -372,7 +386,7 @@ mod tests {
                 temp_dir.as_ref(),
                 Limits::new(Some(6), None),
                 Limits::default(),
-            ), NO_COMPRESSION);
+            ), NO_COMPRESSION).await.unwrap();
 
             cache.put("foo", b"foo".to_vec()).await.unwrap();
             cache.put("bar", b"bar".to_vec()).await.unwrap();
@@ -392,7 +406,7 @@ mod tests {
                 temp_dir.as_ref(),
                 Limits::new(None, Some(2)),
                 Limits::default(),
-            ), NO_COMPRESSION);
+            ), NO_COMPRESSION).await.unwrap();
 
             cache.put("foo", b"foo".to_vec()).await.unwrap();
             cache.put("bar", b"bar".to_vec()).await.unwrap();
@@ -412,7 +426,7 @@ mod tests {
                 temp_dir.as_ref(),
                 Limits::new(Some(6), None),
                 Limits::new(Some(6), None),
-            ), NO_COMPRESSION);
+            ), NO_COMPRESSION).await.unwrap();
 
             cache.put("foo", b"foo".to_vec()).await.unwrap();
             cache.put("bar", b"bar".to_vec()).await.unwrap();
@@ -446,7 +460,7 @@ mod tests {
                 temp_dir.as_ref(),
                 Limits::new(None, Some(2)),
                 Limits::new(None, Some(2)),
-            ), NO_COMPRESSION);
+            ), NO_COMPRESSION).await.unwrap();
 
             cache.put("foo", b"foo".to_vec()).await.unwrap();
             cache.put("bar", b"bar".to_vec()).await.unwrap();
@@ -482,7 +496,7 @@ mod tests {
                     temp_dir.as_ref(),
                     Limits::new(None, Some(1)),
                     Limits::default(),
-                ), NO_COMPRESSION);
+                ), NO_COMPRESSION).await.unwrap();
 
                 cache.put("foo", b"foo".to_vec()).await.unwrap();
                 cache.put("bar", b"bar".to_vec()).await.unwrap();
@@ -495,7 +509,7 @@ mod tests {
                     temp_dir.as_ref(),
                     Limits::default(),
                     Limits::default(),
-                ), NO_COMPRESSION);
+                ), NO_COMPRESSION).await.unwrap();
                 let recovered_items = cache
                     .recover(|k| Some(k.to_string()))
                     .await
@@ -513,7 +527,7 @@ mod tests {
                 temp_dir.as_ref(),
                 Limits::default(),
                 Limits::default(),
-            ), NO_COMPRESSION);
+            ), NO_COMPRESSION).await.unwrap();
 
             cache.put("foo", b"foo".as_slice()).await.unwrap();
             cache.put("bar", b"bar".as_slice()).await.unwrap();

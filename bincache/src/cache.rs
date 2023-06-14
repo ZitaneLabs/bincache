@@ -20,19 +20,20 @@ where
 impl<K, S, C> Cache<K, S, C>
 where
     K: CacheKey + Eq + Hash + Sync + Send,
-    S: CacheStrategy,
+    S: CacheStrategy + Send,
     C: CompressionStrategy + Sync + Send,
 {
     /// Create a new [Cache].
-    pub fn new(strategy: S, compressor: Option<C>) -> Cache<K, S, C>
+    pub async fn new(mut strategy: S, compressor: Option<C>) -> Result<Cache<K, S, C>>
     where
         C: CompressionStrategy + Sync + Send,
     {
-        Cache {
+        strategy.setup().await?;
+        Ok(Cache {
             data: HashMap::new(),
             strategy,
             compressor,
-        }
+        })
     }
 
     /// Put an entry into the cache.
