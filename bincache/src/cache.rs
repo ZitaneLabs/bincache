@@ -1,9 +1,5 @@
 use crate::{
-    compression::MaybeCompressor,
-    traits::{
-        CacheKey, CacheStrategy, CompressionStrategy, FlushableStrategy, RecoverableStrategy,
-    },
-    Result,
+    CacheKey, CacheStrategy, CompressionStrategy, FlushableStrategy, RecoverableStrategy, Result,
 };
 
 use std::{borrow::Cow, collections::HashMap, hash::Hash};
@@ -18,7 +14,7 @@ where
 {
     data: HashMap<K, S::CacheEntry>,
     strategy: S,
-    compressor: MaybeCompressor<C>,
+    compressor: Option<C>,
 }
 
 impl<K, S, C> Cache<K, S, C>
@@ -28,7 +24,7 @@ where
     C: CompressionStrategy + Sync + Send,
 {
     /// Create a new [Cache].
-    pub fn new(strategy: S, compressor: MaybeCompressor<C>) -> Cache<K, S, C>
+    pub fn new(strategy: S, compressor: Option<C>) -> Cache<K, S, C>
     where
         C: CompressionStrategy + Sync + Send,
     {

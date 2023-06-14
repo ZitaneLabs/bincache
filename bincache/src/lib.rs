@@ -82,6 +82,7 @@ mod cache;
 pub mod compression;
 pub mod error;
 mod macros;
+mod noop;
 pub mod strategies;
 pub mod traits;
 pub mod utils;
@@ -89,14 +90,17 @@ pub mod utils;
 pub(crate) use error::Result;
 pub(crate) use utils::disk_util as DiskUtil;
 
-macros::reexport_strategy!(Disk);
-macros::reexport_strategy!(Hybrid);
-macros::reexport_strategy!(Memory);
-
 // Export basic types
 pub use builder::CacheBuilder;
 pub use cache::Cache;
+pub use compression::NO_COMPRESSION;
 pub use error::Error;
+pub use traits::*;
+
+// Export typed caches and builders
+macros::reexport_strategy!(Disk);
+macros::reexport_strategy!(Hybrid);
+macros::reexport_strategy!(Memory);
 
 // README doctests
 #[doc = include_str!("../../README.md")]
