@@ -1,12 +1,11 @@
 mod compression_level;
-mod maybe_compressor;
-mod noop_compressor;
 
 pub use compression_level::CompressionLevel;
-pub use maybe_compressor::MaybeCompressor;
-pub use noop_compressor::Noop;
 
-// zstd compression
+/// A no-op compression strategy.
+pub const NO_COMPRESSION: Option<crate::noop::Noop> = None;
+
+// zstd
 
 #[cfg(feature = "comp_zstd")]
 mod zstd_compressor;

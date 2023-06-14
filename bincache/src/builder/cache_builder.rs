@@ -1,9 +1,6 @@
 use std::hash::Hash;
 
-use crate::cache::Cache;
-use crate::compression::{MaybeCompressor, Noop};
-use crate::traits::{CacheKey, CacheStrategy, CompressionStrategy};
-use crate::Result;
+use crate::{noop::Noop, Cache, CacheKey, CacheStrategy, CompressionStrategy};
 
 /// A builder for creating a new [Cache].
 ///
@@ -15,8 +12,7 @@ use crate::Result;
 /// async fn main() {
 ///     let mut cache = CacheBuilder::default()
 ///         .with_strategy(MemoryStrategy::default())
-///         .build()
-///         .unwrap();
+///         .build();
 ///
 ///     cache.put("key", b"value".to_vec()).await.unwrap();
 /// }
@@ -118,14 +114,11 @@ where
     }
 
     /// Build the cache without using compression
-    pub fn build<K>(self) -> Result<Cache<K, S, Noop>>
+    pub fn build<K>(self) -> Cache<K, S, Noop>
     where
         K: CacheKey + Eq + Hash + Sync + Send,
     {
-        Ok(Cache::new(
-            self.strategy,
-            MaybeCompressor::<Noop>::Passthrough,
-        ))
+        Cache::new(self.strategy, None)
     }
 }
 
@@ -134,21 +127,18 @@ where
     S: CacheStrategy,
     C: CompressionStrategy,
 {
-    pub fn build<K>(self) -> Result<Cache<K, S, C>>
+    pub fn build<K>(self) -> Cache<K, S, C>
     where
         K: CacheKey + Eq + Hash + Sync + Send,
         C: CompressionStrategy + Sync + Send,
     {
-        Ok(Cache::new(
-            self.strategy,
-            MaybeCompressor::Compressor(self.compressor),
-        ))
+        Cache::new(self.strategy, Some(self.compressor))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{async_test, strategies::Noop};
+    use crate::{async_test, noop::Noop};
 
     use super::*;
 
@@ -159,11 +149,11 @@ mod tests {
 
         async fn test_type_aliased() {
             type NoopCacheBuilder = CacheBuilderWithStrategy<Noop>;
-            _ = NoopCacheBuilder::default().build::<String>().unwrap();
+            _ = NoopCacheBuilder::default().build::<String>();
         }
 
         async fn test_key_inference() {
-            let mut cache = CacheBuilder::default().with_strategy(Noop).build().unwrap();
+            let mut cache = CacheBuilder::default().with_strategy(Noop).build();
             cache.put("test".to_string(), vec![]).await.unwrap();
         }
     }

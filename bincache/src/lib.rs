@@ -34,7 +34,7 @@
 //!
 //! # #[tokio::main(flavor = "current_thread")]
 //! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let mut cache = MemoryCacheBuilder::default().build()?;
+//! let mut cache = MemoryCacheBuilder::default().build();
 //! cache.put("key", b"value".to_vec()).await?;
 //! # Ok(())
 //! # }
@@ -49,7 +49,7 @@
 //! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let mut cache = CacheBuilder::default()
 //!     .with_strategy(MemoryStrategy::default())
-//!     .build()?;
+//!     .build();
 //! cache.put("key", b"value".to_vec()).await?;
 //! # Ok(())
 //! # }
@@ -82,6 +82,7 @@ mod cache;
 pub mod compression;
 pub mod error;
 mod macros;
+mod noop;
 pub mod strategies;
 pub mod traits;
 pub mod utils;
@@ -89,14 +90,17 @@ pub mod utils;
 pub(crate) use error::Result;
 pub(crate) use utils::disk_util as DiskUtil;
 
-macros::reexport_strategy!(Disk);
-macros::reexport_strategy!(Hybrid);
-macros::reexport_strategy!(Memory);
-
 // Export basic types
 pub use builder::CacheBuilder;
 pub use cache::Cache;
+pub use compression::NO_COMPRESSION;
 pub use error::Error;
+pub use traits::*;
+
+// Export typed caches and builders
+macros::reexport_strategy!(Disk);
+macros::reexport_strategy!(Hybrid);
+macros::reexport_strategy!(Memory);
 
 // README doctests
 #[doc = include_str!("../../README.md")]

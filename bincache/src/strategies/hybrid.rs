@@ -324,12 +324,12 @@ mod tests {
     use std::fs::metadata;
 
     use super::{Hybrid, Limits, LIMIT_KIND_BYTE_DISK, LIMIT_KIND_ENTRY_DISK};
-    use crate::{async_test, compression::MaybeCompressor, utils::test::TempDir, Cache, Error};
+    use crate::{async_test, utils::test::TempDir, Cache, Error, NO_COMPRESSION};
 
     async_test! {
         async fn test_default_strategy() {
             // We don't need a temp dir here, because we don't write to disk
-            let mut cache = Cache::new(Hybrid::default(), MaybeCompressor::noop());
+            let mut cache = Cache::new(Hybrid::default(), NO_COMPRESSION);
 
             cache.put("foo", b"foo".to_vec()).await.unwrap();
 
@@ -372,7 +372,7 @@ mod tests {
                 temp_dir.as_ref(),
                 Limits::new(Some(6), None),
                 Limits::default(),
-            ), MaybeCompressor::noop());
+            ), NO_COMPRESSION);
 
             cache.put("foo", b"foo".to_vec()).await.unwrap();
             cache.put("bar", b"bar".to_vec()).await.unwrap();
@@ -392,7 +392,7 @@ mod tests {
                 temp_dir.as_ref(),
                 Limits::new(None, Some(2)),
                 Limits::default(),
-            ), MaybeCompressor::noop());
+            ), NO_COMPRESSION);
 
             cache.put("foo", b"foo".to_vec()).await.unwrap();
             cache.put("bar", b"bar".to_vec()).await.unwrap();
@@ -412,7 +412,7 @@ mod tests {
                 temp_dir.as_ref(),
                 Limits::new(Some(6), None),
                 Limits::new(Some(6), None),
-            ), MaybeCompressor::noop());
+            ), NO_COMPRESSION);
 
             cache.put("foo", b"foo".to_vec()).await.unwrap();
             cache.put("bar", b"bar".to_vec()).await.unwrap();
@@ -446,7 +446,7 @@ mod tests {
                 temp_dir.as_ref(),
                 Limits::new(None, Some(2)),
                 Limits::new(None, Some(2)),
-            ), MaybeCompressor::noop());
+            ), NO_COMPRESSION);
 
             cache.put("foo", b"foo".to_vec()).await.unwrap();
             cache.put("bar", b"bar".to_vec()).await.unwrap();
@@ -482,7 +482,7 @@ mod tests {
                     temp_dir.as_ref(),
                     Limits::new(None, Some(1)),
                     Limits::default(),
-                ), MaybeCompressor::noop());
+                ), NO_COMPRESSION);
 
                 cache.put("foo", b"foo".to_vec()).await.unwrap();
                 cache.put("bar", b"bar".to_vec()).await.unwrap();
@@ -495,7 +495,7 @@ mod tests {
                     temp_dir.as_ref(),
                     Limits::default(),
                     Limits::default(),
-                ), MaybeCompressor::noop());
+                ), NO_COMPRESSION);
                 let recovered_items = cache
                     .recover(|k| Some(k.to_string()))
                     .await
@@ -513,7 +513,7 @@ mod tests {
                 temp_dir.as_ref(),
                 Limits::default(),
                 Limits::default(),
-            ), MaybeCompressor::noop());
+            ), NO_COMPRESSION);
 
             cache.put("foo", b"foo".as_slice()).await.unwrap();
             cache.put("bar", b"bar".as_slice()).await.unwrap();
