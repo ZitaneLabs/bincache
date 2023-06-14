@@ -17,12 +17,12 @@ pub async fn create_dir(path: impl AsRef<Path>) -> Result<()> {
     #[cfg(feature = "rt_tokio_1")]
     {
         use tokio::fs::create_dir_all;
-        Ok(create_dir_all(&path)?)
+        Ok(create_dir_all(&path).await?)
     }
     #[cfg(feature = "rt_async-std_1")]
     {
         use async_std::fs::create_dir_all;
-        Ok(create_dir_all(&path)?)
+        Ok(create_dir_all(&path).await?)
     }
 }
 
