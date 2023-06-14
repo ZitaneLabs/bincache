@@ -53,7 +53,7 @@ Bincache supports multiple async runtimes:
     ```rust
     #[tokio::main(flavor = "current_thread")]
     async fn main() -> Result<(), Box<dyn std::error::Error>> {
-        let mut cache = bincache::MemoryCacheBuilder::default().build().await.unwrap();
+        let mut cache = bincache::MemoryCacheBuilder::default().build().await?;
 
         // Put a key-value pair into the cache
         cache.put(&"foo", b"foo".to_vec()).await?;
