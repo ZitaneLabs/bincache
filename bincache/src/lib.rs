@@ -77,12 +77,13 @@ compile_error!(
 ))]
 compile_error!("Cannot enable multiple async runtime features at the same time.");
 
-mod builder;
 mod cache;
-pub mod compression;
-pub mod error;
 mod macros;
 mod noop;
+
+pub mod cache_builder;
+pub mod compression;
+pub mod error;
 pub mod strategies;
 pub mod traits;
 pub mod utils;
@@ -91,8 +92,8 @@ pub(crate) use error::Result;
 pub(crate) use utils::disk_util as DiskUtil;
 
 // Export basic types
-pub use builder::CacheBuilder;
 pub use cache::Cache;
+pub use cache_builder::CacheBuilder;
 pub use compression::NO_COMPRESSION;
 pub use error::Error;
 pub use traits::*;
