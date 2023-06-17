@@ -1,6 +1,6 @@
 [package]
 name = "bincache"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2021"
 description = "ZitaneLabs binary cache."
 license = "MIT"
@@ -12,6 +12,8 @@ blocking = ["dep:futures-util", "async-compression/futures-io"]
 rt_tokio_1 = ["dep:tokio", "async-compression/tokio"]
 rt_async-std_1 = ["dep:async-std", "async-compression/futures-io"]
 comp_zstd = ["async-compression/zstd"]
+comp_brotli = ["async-compression/brotli"]
+comp_gzip = ["async-compression/gzip"]
 
 [dependencies]
 paste = "1"
