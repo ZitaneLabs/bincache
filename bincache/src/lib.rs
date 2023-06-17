@@ -96,6 +96,7 @@ pub use cache::Cache;
 pub use cache_builder::CacheBuilder;
 pub use compression::NO_COMPRESSION;
 pub use error::Error;
+pub use noop::Noop;
 pub use traits::*;
 
 // Export typed caches and builders
