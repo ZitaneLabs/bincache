@@ -4,21 +4,20 @@ use crate::Result;
 use async_trait::async_trait;
 use std::borrow::Cow;
 
-/// A Compressor using Zstd
 #[derive(Debug)]
-pub struct Zstd {
+pub struct Gzip {
     level: CompressionLevel,
 }
 
-impl Zstd {
-    /// Creates a new Zstd Compressor with the given compression level
+impl Gzip {
+    /// Creates a new Gzip Compressor with the given compression level
     pub fn new(level: CompressionLevel) -> Self {
         Self { level }
     }
 }
 
-impl Default for Zstd {
-    /// Creates a new Zstd Compressor with the default compression level
+impl Default for Gzip {
+    /// Creates a new Gzip Compressor with the default compression level
     fn default() -> Self {
         Self {
             level: CompressionLevel::Default,
@@ -27,14 +26,14 @@ impl Default for Zstd {
 }
 
 #[async_trait]
-impl CompressionStrategy for Zstd {
+impl CompressionStrategy for Gzip {
     async fn compress<'a>(&self, data: Cow<'a, [u8]>) -> Result<Cow<'a, [u8]>> {
         #[cfg(feature = "rt_tokio_1")]
         {
             use async_compression::tokio::write;
             use tokio::io::AsyncWriteExt;
             let mut encoder =
-                write::ZstdEncoder::with_quality(Vec::with_capacity(data.len()), self.level.into());
+                write::GzipEncoder::with_quality(Vec::with_capacity(data.len()), self.level.into());
             encoder.write_all(data.as_ref()).await?;
             encoder.shutdown().await?;
             return Ok(encoder.into_inner().into());
@@ -44,7 +43,7 @@ impl CompressionStrategy for Zstd {
             use async_compression::futures::write;
             use futures_util::AsyncWriteExt;
             let mut encoder =
-                write::ZstdEncoder::with_quality(Vec::with_capacity(data.len()), self.level.into());
+                write::GzipEncoder::with_quality(Vec::with_capacity(data.len()), self.level.into());
             encoder.write_all(data.as_ref()).await?;
             encoder.close().await?;
             return Ok(encoder.into_inner().into());
@@ -54,7 +53,7 @@ impl CompressionStrategy for Zstd {
             use async_compression::futures::write;
             use async_std::io::WriteExt;
             let mut encoder =
-                write::ZstdEncoder::with_quality(Vec::with_capacity(data.len()), self.level.into());
+                write::GzipEncoder::with_quality(Vec::with_capacity(data.len()), self.level.into());
             encoder.write_all(data.as_ref()).await?;
             encoder.flush().await?;
             return Ok(encoder.into_inner().into());
@@ -66,7 +65,7 @@ impl CompressionStrategy for Zstd {
         {
             use async_compression::tokio::write;
             use tokio::io::AsyncWriteExt;
-            let mut encoder = write::ZstdDecoder::new(Vec::with_capacity(data.len()));
+            let mut encoder = write::GzipDecoder::new(Vec::with_capacity(data.len()));
             encoder.write_all(data.as_ref()).await?;
             encoder.shutdown().await?;
             return Ok(encoder.into_inner().into());
@@ -75,7 +74,7 @@ impl CompressionStrategy for Zstd {
         {
             use async_compression::futures::write;
             use futures_util::AsyncWriteExt;
-            let mut encoder = write::ZstdDecoder::new(Vec::with_capacity(data.len()));
+            let mut encoder = write::GzipDecoder::new(Vec::with_capacity(data.len()));
             encoder.write_all(data.as_ref()).await?;
             encoder.close().await?;
             return Ok(encoder.into_inner().into());
@@ -84,7 +83,7 @@ impl CompressionStrategy for Zstd {
         {
             use async_compression::futures::write;
             use async_std::io::WriteExt;
-            let mut encoder = write::ZstdDecoder::new(Vec::with_capacity(data.len()));
+            let mut encoder = write::GzipDecoder::new(Vec::with_capacity(data.len()));
             encoder.write_all(data.as_ref()).await?;
             encoder.flush().await?;
             return Ok(encoder.into_inner().into());
@@ -94,15 +93,15 @@ impl CompressionStrategy for Zstd {
 
 #[cfg(test)]
 mod tests {
-    use super::Zstd;
+    use super::Gzip;
     use crate::{async_test, traits::CompressionStrategy, utils::test::create_arb_data};
 
     async_test! {
         async fn test_compression() {
             let data = create_arb_data(1024);
-            let zstd = Zstd::default();
-            let compressed = zstd.compress(data.clone().into()).await.unwrap();
-            let decompressed = zstd.decompress(compressed).await.unwrap();
+            let gzip = Gzip::default();
+            let compressed = gzip.compress(data.clone().into()).await.unwrap();
+            let decompressed = gzip.decompress(compressed).await.unwrap();
             assert_eq!(data.as_slice(), decompressed.as_ref());
         }
     }
