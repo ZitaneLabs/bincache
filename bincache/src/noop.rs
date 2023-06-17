@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use std::borrow::Cow;
 
 /// A no-op object that implements both `CacheStrategy` and `CompressionStrategy`.
-/// Can be used as a placeholder in testing, or as a default compression strategy.
+/// Can be used as a placeholder in testing, or as a default compression strategy (acts as an identity function).
 #[derive(Default, Debug)]
 pub struct Noop;
 
