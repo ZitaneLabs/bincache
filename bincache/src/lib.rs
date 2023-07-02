@@ -95,6 +95,7 @@ pub(crate) use utils::disk_util as DiskUtil;
 // Export basic types
 pub use cache::Cache;
 pub use cache_builder::CacheBuilder;
+pub use cache_capacity::CacheCapacity;
 pub use compression::NO_COMPRESSION;
 pub use error::Error;
 pub use noop::Noop;
@@ -104,9 +105,6 @@ pub use traits::*;
 macros::reexport_strategy!(Disk);
 macros::reexport_strategy!(Hybrid);
 macros::reexport_strategy!(Memory);
-
-// Export functions
-pub use cache_capacity::CacheCapacity;
 
 // README doctests
 #[doc = include_str!("../../README.md")]
