@@ -26,9 +26,7 @@ default = "deny"
 
 [bans]
 skip = [
-    { name = "hermit-abi", version = "0" },
-    { name = "syn", version = "1" },
-    { name = "syn", version = "2" }
+    { name = "syn", version = "1" }
 ]
 
 [sources]
