@@ -29,6 +29,6 @@ impl CacheCapacity {
 
     /// Get the cache utilization as a value between 0% and 100%.
     pub fn utilization_percentage(&self) -> f64 {
-        (self.used_bytes as f64 / self.total_bytes as f64) * 100.00
+        self.utilization() * 100.00
     }
 }
