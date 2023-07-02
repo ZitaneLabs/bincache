@@ -82,6 +82,7 @@ mod macros;
 mod noop;
 
 pub mod cache_builder;
+pub mod cache_capacity;
 pub mod compression;
 pub mod error;
 pub mod strategies;
@@ -94,6 +95,7 @@ pub(crate) use utils::disk_util as DiskUtil;
 // Export basic types
 pub use cache::Cache;
 pub use cache_builder::CacheBuilder;
+pub use cache_capacity::CacheCapacity;
 pub use compression::NO_COMPRESSION;
 pub use error::Error;
 pub use noop::Noop;
