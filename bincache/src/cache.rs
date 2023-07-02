@@ -1,5 +1,6 @@
 use crate::{
-    CacheKey, CacheStrategy, CompressionStrategy, FlushableStrategy, RecoverableStrategy, Result,
+    CacheCapacity, CacheKey, CacheStrategy, CompressionStrategy, FlushableStrategy,
+    RecoverableStrategy, Result,
 };
 
 use std::{borrow::Cow, collections::HashMap, hash::Hash};
@@ -71,6 +72,11 @@ where
     /// Check if an entry exists.
     pub fn exists(&self, key: K) -> bool {
         self.data.contains_key(&key)
+    }
+
+    /// Get the cache capacity.
+    pub fn capacity(&self) -> Option<CacheCapacity> {
+        self.strategy.get_cache_capacity()
     }
 
     #[cfg(test)]
