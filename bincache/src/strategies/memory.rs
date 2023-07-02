@@ -96,7 +96,8 @@ impl CacheStrategy for Memory {
     }
 
     fn get_cache_capacity(&self) -> Option<CacheCapacity> {
-        self.byte_limit.map(|byte_limit| CacheCapacity::new(byte_limit, self.current_byte_count))
+        self.byte_limit
+            .map(|byte_limit| CacheCapacity::new(byte_limit, self.current_byte_count))
     }
 }
 
