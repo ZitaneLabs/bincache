@@ -1,4 +1,4 @@
-use crate::Result;
+use crate::{CacheCapacity, Result};
 use crate::{CacheKey, CacheStrategy, CompressionStrategy};
 use async_trait::async_trait;
 use std::borrow::Cow;
@@ -30,6 +30,10 @@ impl CacheStrategy for Noop {
 
     async fn delete(&mut self, _entry: Self::CacheEntry) -> Result<()> {
         Ok(())
+    }
+
+    fn get_cache_capacity(&self) -> Option<CacheCapacity> {
+        None
     }
 }
 

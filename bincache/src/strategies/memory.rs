@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use std::borrow::Cow;
 
-use crate::{CacheKey, CacheStrategy, Result};
+use crate::{CacheCapacity, CacheKey, CacheStrategy, Result};
 
 const LIMIT_KIND_BYTE: &str = "Stored bytes";
 const LIMIT_KIND_ENTRY: &str = "Stored entries";
@@ -93,6 +93,10 @@ impl CacheStrategy for Memory {
 
     async fn delete(&mut self, entry: Self::CacheEntry) -> Result<()> {
         Ok(_ = self.take(entry).await?)
+    }
+
+    fn get_cache_capacity(&self) -> Option<CacheCapacity> {
+        self.byte_limit.map(|byte_limit| CacheCapacity::new(byte_limit, self.current_byte_count))
     }
 }
 

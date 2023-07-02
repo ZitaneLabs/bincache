@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     traits::{CacheKey, CacheStrategy, RecoverableStrategy},
-    DiskUtil, Result,
+    CacheCapacity, DiskUtil, Result,
 };
 
 const LIMIT_KIND_BYTE: &str = "Stored bytes";
@@ -131,6 +131,10 @@ impl CacheStrategy for Disk {
         self.current_entry_count -= 1;
 
         Ok(())
+    }
+
+    fn get_cache_capacity(&self) -> Option<CacheCapacity> {
+        self.byte_limit.map(|byte_limit| CacheCapacity::new(byte_limit, self.current_byte_count))
     }
 }
 

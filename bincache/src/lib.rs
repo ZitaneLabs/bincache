@@ -82,6 +82,7 @@ mod macros;
 mod noop;
 
 pub mod cache_builder;
+pub mod cache_capacity;
 pub mod compression;
 pub mod error;
 pub mod strategies;
@@ -103,6 +104,9 @@ pub use traits::*;
 macros::reexport_strategy!(Disk);
 macros::reexport_strategy!(Hybrid);
 macros::reexport_strategy!(Memory);
+
+// Export functions
+pub use cache_capacity::CacheCapacity;
 
 // README doctests
 #[doc = include_str!("../../README.md")]

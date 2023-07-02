@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     traits::{CacheKey, CacheStrategy, FlushableStrategy, RecoverableStrategy},
-    DiskUtil, Result,
+    CacheCapacity, DiskUtil, Result,
 };
 
 const LIMIT_KIND_BYTE_DISK: &str = "Stored bytes on disk";
@@ -232,6 +232,19 @@ impl CacheStrategy for Hybrid {
             }
         }
         Ok(())
+    }
+
+    fn get_cache_capacity(&self) -> Option<CacheCapacity> {
+        if let (Some(memory_byte_limit), Some(disk_byte_limit)) =
+            (self.memory_limits.byte_limit, self.disk_limits.byte_limit)
+        {
+            Some(CacheCapacity::new(
+                memory_byte_limit + disk_byte_limit,
+                self.memory_limits.current_byte_count + self.disk_limits.current_byte_count,
+            ))
+        } else {
+            None
+        }
     }
 }
 

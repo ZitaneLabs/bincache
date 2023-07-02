@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use std::borrow::Cow;
 
-use crate::Result;
+use crate::{CacheCapacity, Result};
 
 use super::CacheKey;
 
@@ -31,4 +31,7 @@ pub trait CacheStrategy {
 
     /// Delete a value from the cache.
     async fn delete(&mut self, entry: Self::CacheEntry) -> Result<()>;
+
+    /// Get cache capacity. Returns None if no limit was set.
+    fn get_cache_capacity(&self) -> Option<CacheCapacity>;
 }
