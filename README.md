@@ -30,6 +30,8 @@ Bincache uses a strategy pattern to allow for different caching strategies:
 ### Compression Algorithms
 Bincache supports various compression algorithms:
 
+- [x] Gzip (feature: `comp_gzip`)
+- [x] Brotli (feature: `comp_brotli`)
 - [x] Zstandard (feature: `comp_zstd`)
 - [x] Custom algorithms possible through `CompressionStrategy`
 
@@ -75,6 +77,8 @@ Bincache supports multiple async runtimes:
 - `rt_tokio_1` - Enables tokio 1.x support
 - `rt_async-std_1` - Enables async-std 1.x support
 - `comp_zstd` - Enables zstd compression support
+- `comp_gzip` - Enables gzip compression support
+- `comp_brotli` - Enabled brotli compression support
 
 > By default, we enable a "soft" `implicit-blocking` feature, which only uses blocking I/O if no other runtime feature is enabled.
 >

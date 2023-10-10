@@ -154,7 +154,9 @@ impl RecoverableStrategy for Disk {
         let move_to_lost_found = |source: &Path| {
             // We explcitly ignore any errors here, as we don't want to fail
             // the entire recovery process because of a single file.
-            let Some(file_name) = source.file_name() else { return };
+            let Some(file_name) = source.file_name() else {
+                return;
+            };
             let target_path = lost_found_dir.join(file_name);
             _ = std::fs::rename(source, target_path);
         };
@@ -170,9 +172,13 @@ impl RecoverableStrategy for Disk {
             }
 
             // If key recovery fails, we move the entry to the `lost+found` directory.
-            let Some(key) = path.file_name().and_then(|p| p.to_str()).and_then(&mut recover_key) else {
+            let Some(key) = path
+                .file_name()
+                .and_then(|p| p.to_str())
+                .and_then(&mut recover_key)
+            else {
                 move_to_lost_found(&path);
-                continue
+                continue;
             };
 
             // Read file
