@@ -18,7 +18,7 @@ jobs:
   test:
     runs-on: [ubuntu-latest]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: rustup toolchain install stable --profile minimal
       - run: curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ${CARGO_HOME:-~/.cargo}/bin
       - name: cargo test (blocking)
@@ -32,7 +32,7 @@ jobs:
   clippy:
     runs-on: [ubuntu-latest]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: rustup toolchain install stable --profile minimal
       - run: rustup component add clippy
       - name: cargo clippy (blocking)
@@ -44,7 +44,7 @@ jobs:
   rustfmt:
     runs-on: [ubuntu-latest]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - run: rustup toolchain install stable --profile minimal
       - run: rustup component add rustfmt
       - run: cargo fmt --all --check
