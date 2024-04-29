@@ -1,12 +1,13 @@
 [package]
 name = "bincache"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2021"
 description = "ZitaneLabs binary cache."
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+readme.workspace = true
 
 [features]
 default = ["implicit-blocking"]
