@@ -2,14 +2,15 @@
 
 ![Backed by Zitane Labs][badge_zitane]
 ![Powered by Rust][badge_rust]
+![crates.io: bincache][badge_crates]
+![MSRV: 1.65][badge_msrv]
 ![License: MIT][badge_license]
 
 [badge_zitane]: https://badgers.space/badge/Backed%20by/Zitane%20Labs/pink
 [badge_rust]: https://badgers.space/badge/Powered%20by/Rust/orange
+[badge_crates]: https://badgers.space/crates/info/bincache
+[badge_msrv]: https://badgers.space/badge/MSRV/1.65
 [badge_license]: https://badgers.space/badge/License/MIT
-
-**The library is not yet published to crates.io.**<br>
-The API is not yet stabilized, so expect breaking changes.
 
 ## Overview
 

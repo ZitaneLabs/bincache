@@ -1,28 +1,22 @@
-all-features = false
-no-default-features = false
+[graph]
+all-features = true
 
 [advisories]
+version = 2
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
-vulnerability = "deny"
-unmaintained = "warn"
-yanked = "warn"
-notice = "warn"
 ignore = [
     # "RUSTSEC-0000-0000"
 ]
 
 [licenses]
-unlicensed = "deny"
+version = 2
 allow = [
     "MIT",
     "Apache-2.0",
     "BSD-3-Clause",
     "Unicode-DFS-2016", # used by unicode-ident
 ]
-copyleft = "deny"
-allow-osi-fsf-free = "neither"
-default = "deny"
 
 [bans]
 skip = [

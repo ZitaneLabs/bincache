@@ -1,9 +1,12 @@
 [package]
 name = "bincache"
-version = "0.4.3"
+version = "0.5.0"
 edition = "2021"
 description = "ZitaneLabs binary cache."
-license = "MIT"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
 
 [features]
 default = ["implicit-blocking"]
