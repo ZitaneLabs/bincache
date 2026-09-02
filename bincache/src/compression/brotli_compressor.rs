@@ -1,6 +1,6 @@
 use super::compression_level::CompressionLevel;
-use crate::traits::CompressionStrategy;
 use crate::Result;
+use crate::traits::CompressionStrategy;
 use async_trait::async_trait;
 use std::borrow::Cow;
 

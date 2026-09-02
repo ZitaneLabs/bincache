@@ -1,6 +1,6 @@
 use std::hash::Hash;
 
-use crate::{noop::Noop, Cache, CacheKey, CacheStrategy, CompressionStrategy, Result};
+use crate::{Cache, CacheKey, CacheStrategy, CompressionStrategy, Result, noop::Noop};
 
 /// A builder for creating a new [Cache].
 ///

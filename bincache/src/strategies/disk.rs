@@ -6,8 +6,8 @@ use std::{
 };
 
 use crate::{
-    traits::{CacheKey, CacheStrategy, RecoverableStrategy},
     CacheCapacity, DiskUtil, Result,
+    traits::{CacheKey, CacheStrategy, RecoverableStrategy},
 };
 
 const LIMIT_KIND_BYTE: &str = "Stored bytes";
@@ -206,7 +206,7 @@ impl RecoverableStrategy for Disk {
 #[cfg(test)]
 mod tests {
     use super::{Disk, LIMIT_KIND_BYTE, LIMIT_KIND_ENTRY};
-    use crate::{async_test, utils::test::TempDir, Cache, Error, NO_COMPRESSION};
+    use crate::{Cache, Error, NO_COMPRESSION, async_test, utils::test::TempDir};
 
     async_test! {
         async fn test_default() {

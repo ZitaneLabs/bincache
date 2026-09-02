@@ -1,7 +1,7 @@
 [package]
 name = "bincache"
 version = "0.5.1"
-edition = "2021"
+edition = "2024"
 description = "ZitaneLabs binary cache."
 authors.workspace = true
 license.workspace = true

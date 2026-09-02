@@ -5,8 +5,8 @@ use std::{
 };
 
 use crate::{
-    traits::{CacheKey, CacheStrategy, FlushableStrategy, RecoverableStrategy},
     CacheCapacity, DiskUtil, Result,
+    traits::{CacheKey, CacheStrategy, FlushableStrategy, RecoverableStrategy},
 };
 
 const LIMIT_KIND_BYTE_DISK: &str = "Stored bytes on disk";
@@ -356,8 +356,8 @@ impl FlushableStrategy for Hybrid {
 mod tests {
     use std::fs::metadata;
 
-    use super::{Hybrid, Limits, LIMIT_KIND_BYTE_DISK, LIMIT_KIND_ENTRY_DISK};
-    use crate::{async_test, utils::test::TempDir, Cache, Error, NO_COMPRESSION};
+    use super::{Hybrid, LIMIT_KIND_BYTE_DISK, LIMIT_KIND_ENTRY_DISK, Limits};
+    use crate::{Cache, Error, NO_COMPRESSION, async_test, utils::test::TempDir};
 
     async_test! {
         async fn test_default_strategy() {
