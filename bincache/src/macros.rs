@@ -1,22 +1,21 @@
 macro_rules! reexport_strategy {
-    ($strategy:ident) => {
-        paste::paste! {
-            #[doc = concat!("A [Cache] using the [", stringify!($strategy), "Strategy].")]
-            pub type [<$strategy Cache>]<K, C> = $crate::Cache<K, $crate::strategies::$strategy, C>;
-            #[doc = concat!("A [CacheBuilder] using the [", stringify!($strategy), "Strategy].")]
-            pub type [<$strategy CacheBuilder>] = $crate::cache_builder::CacheBuilderWithStrategy<$crate::strategies::$strategy>;
-            pub use $crate::strategies::$strategy as [<$strategy Strategy>];
+    ($strategy:ident, $cache:ident, $builder:ident, $strategy_alias:ident) => {
+        #[doc = concat!("A [Cache] using the [", stringify!($strategy), "Strategy].")]
+        pub type $cache<K, C> = $crate::Cache<K, $crate::strategies::$strategy, C>;
+        #[doc = concat!("A [CacheBuilder] using the [", stringify!($strategy), "Strategy].")]
+        pub type $builder =
+            $crate::cache_builder::CacheBuilderWithStrategy<$crate::strategies::$strategy>;
+        pub use $crate::strategies::$strategy as $strategy_alias;
 
-            const _: () = {
-                fn assert_default<T: Default>() {}
-                fn assert_strategy<T: $crate::traits::CacheStrategy>() {}
+        const _: () = {
+            fn assert_default<T: Default>() {}
+            fn assert_strategy<T: $crate::traits::CacheStrategy>() {}
 
-                fn assert_all() {
-                    assert_default::<$crate::strategies::$strategy>();
-                    assert_strategy::<$crate::strategies::$strategy>();
-                }
-            };
-        }
+            fn assert_all() {
+                assert_default::<$crate::strategies::$strategy>();
+                assert_strategy::<$crate::strategies::$strategy>();
+            }
+        };
     };
 }
 

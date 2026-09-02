@@ -102,9 +102,9 @@ pub use noop::Noop;
 pub use traits::*;
 
 // Export typed caches and builders
-macros::reexport_strategy!(Disk);
-macros::reexport_strategy!(Hybrid);
-macros::reexport_strategy!(Memory);
+macros::reexport_strategy!(Disk, DiskCache, DiskCacheBuilder, DiskStrategy);
+macros::reexport_strategy!(Hybrid, HybridCache, HybridCacheBuilder, HybridStrategy);
+macros::reexport_strategy!(Memory, MemoryCache, MemoryCacheBuilder, MemoryStrategy);
 
 // README doctests
 #[doc = include_str!("../../README.md")]
