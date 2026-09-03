@@ -83,6 +83,31 @@ impl CacheStrategy for Memory {
         Ok(entry.data.as_slice().into())
     }
 
+    async fn replace<'a, K, V>(
+        &mut self,
+        _key: &K,
+        entry: &mut Self::CacheEntry,
+        value: V,
+    ) -> Result<()>
+    where
+        K: CacheKey + Sync + Send,
+        V: Into<Cow<'a, [u8]>> + Send,
+    {
+        let value = value.into();
+        let byte_len = value.len();
+        let new_total = self.current_byte_count - entry.byte_len + byte_len;
+        if self.byte_limit.is_some_and(|limit| new_total > limit) {
+            return Err(crate::Error::LimitExceeded {
+                limit_kind: LIMIT_KIND_BYTE.into(),
+            });
+        }
+
+        entry.data = value.into_owned();
+        entry.byte_len = byte_len;
+        self.current_byte_count = new_total;
+        Ok(())
+    }
+
     async fn take(&mut self, entry: Self::CacheEntry) -> Result<Vec<u8>> {
         // Decrement limits
         self.current_byte_count -= entry.byte_len;
@@ -172,6 +197,35 @@ mod tests {
                     _ => panic!("Unexpected error: {:?}", err),
                 }
             }
+        }
+
+        async fn test_replace_accounting_capacity_and_failure() {
+            let mut cache = Cache::new(Memory::new(Some(100), None), NO_COMPRESSION).await.unwrap();
+            cache.put("foo", vec![1; 100]).await.unwrap();
+            cache.put("foo", vec![2; 50]).await.unwrap();
+            assert_eq!(cache.get("foo").await.unwrap(), vec![2; 50]);
+            assert_eq!(cache.strategy().current_byte_count, 50);
+            assert_eq!(cache.strategy().current_entry_count, 1);
+            cache.put("foo", vec![5; 75]).await.unwrap();
+            assert_eq!(cache.strategy().current_byte_count, 75);
+            cache.put("foo", vec![2; 50]).await.unwrap();
+            cache.put("bar", vec![3; 50]).await.unwrap();
+            assert!(cache.put("foo", vec![4; 51]).await.is_err());
+            assert_eq!(cache.get("foo").await.unwrap(), vec![2; 50]);
+            assert_eq!(cache.strategy().current_byte_count, 100);
+            assert_eq!(cache.strategy().current_entry_count, 2);
+        }
+
+    }
+
+    #[cfg(feature = "comp_gzip")]
+    async_test! {
+        async fn test_replace_with_compression() {
+            let mut cache = Cache::new(Memory::default(), Some(crate::compression::Gzip::default())).await.unwrap();
+            cache.put("foo", vec![1; 100]).await.unwrap();
+            cache.put("foo", vec![2; 50]).await.unwrap();
+            assert_eq!(cache.get("foo").await.unwrap(), vec![2; 50]);
+            assert_eq!(cache.strategy().current_entry_count, 1);
         }
     }
 }

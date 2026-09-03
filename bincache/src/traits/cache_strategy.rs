@@ -23,6 +23,24 @@ pub trait CacheStrategy {
         K: CacheKey + Sync + Send,
         V: Into<Cow<'a, [u8]>> + Send;
 
+    /// Replace an existing entry without temporarily counting both values.
+    ///
+    /// If this operation fails, `entry` must remain valid and unchanged.
+    async fn replace<'a, K, V>(
+        &mut self,
+        _key: &K,
+        _entry: &mut Self::CacheEntry,
+        _value: V,
+    ) -> Result<()>
+    where
+        K: CacheKey + Sync + Send,
+        V: Into<Cow<'a, [u8]>> + Send,
+    {
+        Err(crate::Error::Custom {
+            message: "Cache strategy does not support replacing entries".into(),
+        })
+    }
+
     /// Get a value from the cache.
     async fn get<'a>(&self, entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>>;
 

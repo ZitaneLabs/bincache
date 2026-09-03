@@ -44,6 +44,10 @@ where
     {
         let value: Cow<'_, [u8]> = self.compressor.compress(value.into()).await?;
 
+        if let Some(entry) = self.data.get_mut(&key) {
+            return self.strategy.replace(&key, entry, value).await;
+        }
+
         let entry = self.strategy.put(&key, value).await?;
         self.data.insert(key, entry);
         Ok(())

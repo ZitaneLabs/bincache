@@ -9,6 +9,8 @@ use crate::{
     traits::{CacheKey, CacheStrategy, FlushableStrategy, RecoverableStrategy},
 };
 
+use super::disk::{FILE_MAGIC, cache_path, decode_entry, write_entry};
+
 const LIMIT_KIND_BYTE_DISK: &str = "Stored bytes on disk";
 const LIMIT_KIND_ENTRY_DISK: &str = "Stored entries on disk";
 
@@ -80,10 +82,23 @@ impl Limits {
             if self.current_byte_count + size > byte_limit {
                 return LimitEvaluation::LimitExceeded(LimitExceededKind::Bytes);
             }
-        } else if let Some(entries_limit) = self.entry_limit {
+        }
+        if let Some(entries_limit) = self.entry_limit {
             if self.current_entry_count + 1 > entries_limit {
                 return LimitEvaluation::LimitExceeded(LimitExceededKind::Entries);
             }
+        }
+        LimitEvaluation::LimitSatisfied
+    }
+
+    fn evaluate_replacement(&self, size: usize, old_size: Option<usize>) -> LimitEvaluation {
+        let byte_count = self.current_byte_count - old_size.unwrap_or(0) + size;
+        if self.byte_limit.is_some_and(|limit| byte_count > limit) {
+            return LimitEvaluation::LimitExceeded(LimitExceededKind::Bytes);
+        }
+        let entry_count = self.current_entry_count - usize::from(old_size.is_some()) + 1;
+        if self.entry_limit.is_some_and(|limit| entry_count > limit) {
+            return LimitEvaluation::LimitExceeded(LimitExceededKind::Entries);
         }
         LimitEvaluation::LimitSatisfied
     }
@@ -161,8 +176,9 @@ impl CacheStrategy for Hybrid {
         // Try to store on disk
         else if fits_into_disk.is_satisfied() {
             // Write to disk
-            let path = self.cache_dir.join(key.to_key());
-            DiskUtil::write(&path, &value).await?;
+            let key = key.to_key();
+            let path = cache_path(&self.cache_dir, &key);
+            write_entry(&path, &key, &value).await?;
 
             // Increment limits
             self.disk_limits.current_byte_count += byte_len;
@@ -185,10 +201,92 @@ impl CacheStrategy for Hybrid {
     async fn get<'a>(&self, entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>> {
         match entry {
             Entry::Memory(entry) => Ok(Cow::Borrowed(&entry.data)),
-            Entry::Disk(entry) => Ok(Cow::Owned(
-                DiskUtil::read(&entry.path, Some(entry.byte_len)).await?,
-            )),
+            Entry::Disk(entry) => {
+                let encoded = DiskUtil::read(&entry.path, None).await?;
+                let (_, value) = decode_entry(&encoded).ok_or_else(|| crate::Error::Custom {
+                    message: "Invalid disk cache entry".into(),
+                })?;
+                Ok(Cow::Owned(value.to_vec()))
+            }
         }
+    }
+
+    async fn replace<'a, K, V>(
+        &mut self,
+        key: &K,
+        entry: &mut Self::CacheEntry,
+        value: V,
+    ) -> Result<()>
+    where
+        K: CacheKey + Sync + Send,
+        V: Into<Cow<'a, [u8]>> + Send,
+    {
+        let value = value.into();
+        let byte_len = value.len();
+        let old_memory_size = match entry {
+            Entry::Memory(old) => Some(old.byte_len),
+            Entry::Disk(_) => None,
+        };
+        let old_disk_size = match entry {
+            Entry::Memory(_) => None,
+            Entry::Disk(old) => Some(old.byte_len),
+        };
+        let fits_memory = self
+            .memory_limits
+            .evaluate_replacement(byte_len, old_memory_size);
+        let fits_disk = self
+            .disk_limits
+            .evaluate_replacement(byte_len, old_disk_size);
+
+        if fits_memory.is_satisfied() {
+            let new_entry = MemoryEntry {
+                data: value.into_owned(),
+                byte_len,
+            };
+            match entry {
+                Entry::Memory(old) => {
+                    self.memory_limits.current_byte_count =
+                        self.memory_limits.current_byte_count - old.byte_len + byte_len;
+                    *old = new_entry;
+                }
+                Entry::Disk(old) => {
+                    DiskUtil::delete(&old.path).await?;
+                    self.disk_limits.current_byte_count -= old.byte_len;
+                    self.disk_limits.current_entry_count -= 1;
+                    self.memory_limits.current_byte_count += byte_len;
+                    self.memory_limits.current_entry_count += 1;
+                    *entry = Entry::Memory(new_entry);
+                }
+            }
+            return Ok(());
+        }
+
+        if fits_disk.is_satisfied() {
+            let key = key.to_key();
+            let path = cache_path(&self.cache_dir, &key);
+            write_entry(&path, &key, &value).await?;
+            match entry {
+                Entry::Memory(old) => {
+                    self.memory_limits.current_byte_count -= old.byte_len;
+                    self.memory_limits.current_entry_count -= 1;
+                    self.disk_limits.current_byte_count += byte_len;
+                    self.disk_limits.current_entry_count += 1;
+                }
+                Entry::Disk(old) => {
+                    self.disk_limits.current_byte_count =
+                        self.disk_limits.current_byte_count - old.byte_len + byte_len;
+                }
+            }
+            *entry = Entry::Disk(DiskEntry { path, byte_len });
+            return Ok(());
+        }
+
+        let limit_kind = Cow::Borrowed(match fits_disk {
+            LimitEvaluation::LimitExceeded(LimitExceededKind::Bytes) => LIMIT_KIND_BYTE_DISK,
+            LimitEvaluation::LimitExceeded(LimitExceededKind::Entries) => LIMIT_KIND_ENTRY_DISK,
+            _ => unreachable!(),
+        });
+        Err(crate::Error::LimitExceeded { limit_kind })
     }
 
     async fn take(&mut self, entry: Self::CacheEntry) -> Result<Vec<u8>> {
@@ -201,7 +299,11 @@ impl CacheStrategy for Hybrid {
                 Ok(entry.data)
             }
             Entry::Disk(ref entry) => {
-                let data = DiskUtil::read(&entry.path, Some(entry.byte_len)).await?;
+                let encoded = DiskUtil::read(&entry.path, None).await?;
+                let (_, value) = decode_entry(&encoded).ok_or_else(|| crate::Error::Custom {
+                    message: "Invalid disk cache entry".into(),
+                })?;
+                let data = value.to_vec();
 
                 // Delete from disk
                 DiskUtil::delete(&entry.path).await?;
@@ -250,7 +352,7 @@ impl CacheStrategy for Hybrid {
 
 #[async_trait]
 impl RecoverableStrategy for Hybrid {
-    async fn recover<K, F>(&mut self, mut recover_key: F) -> Result<Vec<(K, Self::CacheEntry)>>
+    async fn recover<K, F>(&mut self, recover_key: F) -> Result<Vec<(K, Self::CacheEntry)>>
     where
         K: Send,
         F: Fn(&str) -> Option<K> + Send,
@@ -280,21 +382,26 @@ impl RecoverableStrategy for Hybrid {
                 continue;
             }
 
-            // If key recovery fails, we move the entry to the `lost+found` directory.
-            let Some(key) = path
-                .file_name()
-                .and_then(|p| p.to_str())
-                .and_then(&mut recover_key)
-            else {
+            let buf = DiskUtil::read(&path, None).await?;
+            let (key_str, value) = if let Some(decoded) = decode_entry(&buf) {
+                decoded
+            } else if buf.starts_with(FILE_MAGIC) {
+                move_to_lost_found(&path);
+                continue;
+            } else {
+                let Some(key_str) = path.file_name().and_then(|name| name.to_str()) else {
+                    move_to_lost_found(&path);
+                    continue;
+                };
+                (key_str, buf.as_slice())
+            };
+            let Some(key) = recover_key(key_str) else {
                 move_to_lost_found(&path);
                 continue;
             };
 
-            // Read file
-            let buf = DiskUtil::read(&path, None).await?;
-
             // Increment limits
-            self.disk_limits.current_byte_count += buf.len();
+            self.disk_limits.current_byte_count += value.len();
             self.disk_limits.current_entry_count += 1;
 
             // Push entry
@@ -302,7 +409,7 @@ impl RecoverableStrategy for Hybrid {
                 key,
                 Entry::Disk(DiskEntry {
                     path,
-                    byte_len: buf.len(),
+                    byte_len: value.len(),
                 }),
             ));
         }
@@ -337,8 +444,9 @@ impl FlushableStrategy for Hybrid {
         }
 
         // Write to disk
-        let path = self.cache_dir.join(key.to_key());
-        DiskUtil::write(&path, &entry.data).await?;
+        let key = key.to_key();
+        let path = cache_path(&self.cache_dir, &key);
+        write_entry(&path, &key, &entry.data).await?;
 
         // Increment limits
         self.disk_limits.current_byte_count += entry.byte_len;
@@ -354,9 +462,9 @@ impl FlushableStrategy for Hybrid {
 
 #[cfg(test)]
 mod tests {
-    use std::fs::metadata;
+    use std::fs;
 
-    use super::{Hybrid, LIMIT_KIND_BYTE_DISK, LIMIT_KIND_ENTRY_DISK, Limits};
+    use super::{Hybrid, LIMIT_KIND_BYTE_DISK, LIMIT_KIND_ENTRY_DISK, Limits, cache_path};
     use crate::{Cache, Error, NO_COMPRESSION, async_test, utils::test::TempDir};
 
     async_test! {
@@ -415,7 +523,7 @@ mod tests {
 
             cache.put("baz", b"baz".to_vec()).await.unwrap();
 
-            assert!(metadata(temp_dir.as_ref().join("baz")).unwrap().is_file());
+            assert!(cache_path(temp_dir.as_ref(), "baz").is_file());
         }
 
         async fn test_strategy_with_memory_entry_limit() {
@@ -435,7 +543,7 @@ mod tests {
 
             cache.put("baz", b"baz".to_vec()).await.unwrap();
 
-            assert!(metadata(temp_dir.as_ref().join("baz")).unwrap().is_file());
+            assert!(cache_path(temp_dir.as_ref(), "baz").is_file());
         }
 
         async fn test_strategy_with_memory_and_disk_byte_limit() {
@@ -456,8 +564,8 @@ mod tests {
             cache.put("baz", b"baz".to_vec()).await.unwrap();
             cache.put("bax", b"bax".to_vec()).await.unwrap();
 
-            assert!(metadata(temp_dir.as_ref().join("baz")).unwrap().is_file());
-            assert!(metadata(temp_dir.as_ref().join("bax")).unwrap().is_file());
+            assert!(cache_path(temp_dir.as_ref(), "baz").is_file());
+            assert!(cache_path(temp_dir.as_ref(), "bax").is_file());
 
             assert!(matches!(
                 cache.put("quix", b"quix".to_vec()).await,
@@ -483,8 +591,8 @@ mod tests {
             cache.put("baz", b"baz".to_vec()).await.unwrap();
             cache.put("bax", b"bax".to_vec()).await.unwrap();
 
-            assert!(metadata(temp_dir.as_ref().join("baz")).unwrap().is_file());
-            assert!(metadata(temp_dir.as_ref().join("bax")).unwrap().is_file());
+            assert!(cache_path(temp_dir.as_ref(), "baz").is_file());
+            assert!(cache_path(temp_dir.as_ref(), "bax").is_file());
 
             assert!(matches!(
                 cache.put("quix", b"quix".to_vec()).await,
@@ -545,6 +653,61 @@ mod tests {
             assert_eq!(cache.strategy().memory_limits.current_byte_count, 0);
             assert_eq!(cache.strategy().memory_limits.current_entry_count, 0);
             assert_eq!(cache.strategy().disk_limits.current_byte_count, 6);
+            assert_eq!(cache.strategy().disk_limits.current_entry_count, 2);
+        }
+
+        async fn test_safe_disk_key() {
+            let temp_dir = TempDir::new();
+            let escaped = temp_dir.as_ref().with_extension("escaped");
+            let key = format!("../{}", escaped.file_name().unwrap().to_string_lossy());
+            let mut cache = Cache::new(Hybrid::new(
+                temp_dir.as_ref(),
+                Limits::new(Some(0), None),
+                Limits::default(),
+            ), NO_COMPRESSION).await.unwrap();
+            cache.put(key, b"safe".to_vec()).await.unwrap();
+            assert!(!escaped.exists());
+            assert_eq!(fs::read_dir(temp_dir.as_ref()).unwrap().count(), 1);
+        }
+
+        async fn test_replace_accounting_capacity_and_failure() {
+            let temp_dir = TempDir::new();
+            let mut cache = Cache::new(Hybrid::new(
+                temp_dir.as_ref(),
+                Limits::new(Some(100), None),
+                Limits::new(Some(0), None),
+            ), NO_COMPRESSION).await.unwrap();
+            cache.put("foo", vec![1; 100]).await.unwrap();
+            cache.put("foo", vec![2; 50]).await.unwrap();
+            assert_eq!(cache.get("foo").await.unwrap(), vec![2; 50]);
+            assert_eq!(cache.strategy().memory_limits.current_byte_count, 50);
+            assert_eq!(cache.strategy().memory_limits.current_entry_count, 1);
+            cache.put("foo", vec![5; 75]).await.unwrap();
+            assert_eq!(cache.strategy().memory_limits.current_byte_count, 75);
+            cache.put("foo", vec![2; 50]).await.unwrap();
+            cache.put("bar", vec![3; 50]).await.unwrap();
+            assert!(cache.put("foo", vec![4; 51]).await.is_err());
+            assert_eq!(cache.get("foo").await.unwrap(), vec![2; 50]);
+            assert_eq!(cache.strategy().memory_limits.current_byte_count, 100);
+            assert_eq!(cache.strategy().memory_limits.current_entry_count, 2);
+        }
+
+        async fn test_replace_disk_backed_entry() {
+            let temp_dir = TempDir::new();
+            let mut cache = Cache::new(Hybrid::new(
+                temp_dir.as_ref(),
+                Limits::new(Some(0), None),
+                Limits::new(Some(100), None),
+            ), NO_COMPRESSION).await.unwrap();
+            cache.put("foo", vec![1; 100]).await.unwrap();
+            cache.put("foo", vec![2; 50]).await.unwrap();
+            assert_eq!(cache.get("foo").await.unwrap(), vec![2; 50]);
+            assert_eq!(cache.strategy().disk_limits.current_byte_count, 50);
+            assert_eq!(cache.strategy().disk_limits.current_entry_count, 1);
+            cache.put("bar", vec![3; 50]).await.unwrap();
+            assert!(cache.put("foo", vec![4; 51]).await.is_err());
+            assert_eq!(cache.get("foo").await.unwrap(), vec![2; 50]);
+            assert_eq!(cache.strategy().disk_limits.current_byte_count, 100);
             assert_eq!(cache.strategy().disk_limits.current_entry_count, 2);
         }
     }

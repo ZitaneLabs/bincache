@@ -12,6 +12,40 @@ use crate::{
 
 const LIMIT_KIND_BYTE: &str = "Stored bytes";
 const LIMIT_KIND_ENTRY: &str = "Stored entries";
+pub(crate) const FILE_MAGIC: &[u8; 8] = b"BINCACHE";
+
+pub(crate) fn cache_path(cache_dir: &Path, key: &str) -> PathBuf {
+    cache_dir.join(blake3::hash(key.as_bytes()).to_hex().as_str())
+}
+
+pub(crate) fn encode_entry(key: &str, value: &[u8]) -> Vec<u8> {
+    let mut encoded = Vec::with_capacity(FILE_MAGIC.len() + 8 + key.len() + value.len());
+    encoded.extend_from_slice(FILE_MAGIC);
+    encoded.extend_from_slice(&(key.len() as u64).to_le_bytes());
+    encoded.extend_from_slice(key.as_bytes());
+    encoded.extend_from_slice(value);
+    encoded
+}
+
+pub(crate) fn decode_entry(encoded: &[u8]) -> Option<(&str, &[u8])> {
+    if encoded.get(..8)? != FILE_MAGIC {
+        return None;
+    }
+    let key_len = usize::try_from(u64::from_le_bytes(encoded.get(8..16)?.try_into().ok()?)).ok()?;
+    let key_end = 16usize.checked_add(key_len)?;
+    let key = std::str::from_utf8(encoded.get(16..key_end)?).ok()?;
+    Some((key, encoded.get(key_end..)?))
+}
+
+pub(crate) async fn write_entry(path: &Path, key: &str, value: &[u8]) -> Result<()> {
+    let tmp_path = path.with_extension("tmp");
+    DiskUtil::write(&tmp_path, &encode_entry(key, value)).await?;
+    if let Err(error) = std::fs::rename(&tmp_path, path) {
+        _ = std::fs::remove_file(&tmp_path);
+        return Err(error.into());
+    }
+    Ok(())
+}
 
 #[derive(Debug)]
 pub struct Entry {
@@ -100,8 +134,9 @@ impl CacheStrategy for Disk {
         }
 
         // Write to disk
-        let path = self.cache_dir.join(key.to_key());
-        DiskUtil::write(&path, value.as_ref()).await?;
+        let key = key.to_key();
+        let path = cache_path(&self.cache_dir, &key);
+        write_entry(&path, &key, value.as_ref()).await?;
 
         // Increment limits
         self.current_byte_count += byte_len;
@@ -111,13 +146,41 @@ impl CacheStrategy for Disk {
     }
 
     async fn get<'a>(&self, entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>> {
-        DiskUtil::read(&entry.path, Some(entry.byte_len))
-            .await
-            .map(Cow::Owned)
+        let encoded = DiskUtil::read(&entry.path, None).await?;
+        let (_, value) = decode_entry(&encoded).ok_or_else(|| crate::Error::Custom {
+            message: "Invalid disk cache entry".into(),
+        })?;
+        Ok(Cow::Owned(value.to_vec()))
+    }
+
+    async fn replace<'a, K, V>(
+        &mut self,
+        key: &K,
+        entry: &mut Self::CacheEntry,
+        value: V,
+    ) -> Result<()>
+    where
+        K: CacheKey + Sync + Send,
+        V: Into<Cow<'a, [u8]>> + Send,
+    {
+        let value = value.into();
+        let byte_len = value.len();
+        let new_total = self.current_byte_count - entry.byte_len + byte_len;
+        if self.byte_limit.is_some_and(|limit| new_total > limit) {
+            return Err(crate::Error::LimitExceeded {
+                limit_kind: LIMIT_KIND_BYTE.into(),
+            });
+        }
+
+        let key = key.to_key();
+        write_entry(&entry.path, &key, &value).await?;
+        entry.byte_len = byte_len;
+        self.current_byte_count = new_total;
+        Ok(())
     }
 
     async fn take(&mut self, entry: Self::CacheEntry) -> Result<Vec<u8>> {
-        let data = DiskUtil::read(&entry.path, Some(entry.byte_len)).await?;
+        let data = self.get(&entry).await?.into_owned();
         self.delete(entry).await?;
 
         Ok(data)
@@ -141,7 +204,7 @@ impl CacheStrategy for Disk {
 
 #[async_trait]
 impl RecoverableStrategy for Disk {
-    async fn recover<K, F>(&mut self, mut recover_key: F) -> Result<Vec<(K, Self::CacheEntry)>>
+    async fn recover<K, F>(&mut self, recover_key: F) -> Result<Vec<(K, Self::CacheEntry)>>
     where
         K: Send,
         F: Fn(&str) -> Option<K> + Send,
@@ -171,21 +234,26 @@ impl RecoverableStrategy for Disk {
                 continue;
             }
 
-            // If key recovery fails, we move the entry to the `lost+found` directory.
-            let Some(key) = path
-                .file_name()
-                .and_then(|p| p.to_str())
-                .and_then(&mut recover_key)
-            else {
+            let buf = DiskUtil::read(&path, None).await?;
+            let (key_str, value) = if let Some(decoded) = decode_entry(&buf) {
+                decoded
+            } else if buf.starts_with(FILE_MAGIC) {
+                move_to_lost_found(&path);
+                continue;
+            } else {
+                let Some(key_str) = path.file_name().and_then(|name| name.to_str()) else {
+                    move_to_lost_found(&path);
+                    continue;
+                };
+                (key_str, buf.as_slice())
+            };
+            let Some(key) = recover_key(key_str) else {
                 move_to_lost_found(&path);
                 continue;
             };
 
-            // Read file
-            let buf = DiskUtil::read(&path, None).await?;
-
             // Increment limits
-            self.current_byte_count += buf.len();
+            self.current_byte_count += value.len();
             self.current_entry_count += 1;
 
             // Push entry
@@ -193,7 +261,7 @@ impl RecoverableStrategy for Disk {
                 key,
                 Entry {
                     path,
-                    byte_len: buf.len(),
+                    byte_len: value.len(),
                 },
             ));
         }
@@ -205,7 +273,9 @@ impl RecoverableStrategy for Disk {
 
 #[cfg(test)]
 mod tests {
-    use super::{Disk, LIMIT_KIND_BYTE, LIMIT_KIND_ENTRY};
+    use std::fs;
+
+    use super::{Disk, LIMIT_KIND_BYTE, LIMIT_KIND_ENTRY, cache_path};
     use crate::{Cache, Error, NO_COMPRESSION, async_test, utils::test::TempDir};
 
     async_test! {
@@ -302,6 +372,69 @@ mod tests {
                 assert_eq!(cache.strategy().current_byte_count, 6);
                 assert_eq!(cache.strategy().current_entry_count, 2);
             }
+        }
+
+        async fn test_safe_keys_and_recovery() {
+            let temp_dir = TempDir::new();
+            let escaped = temp_dir.as_ref().with_extension("escaped");
+            let traversal = format!("../{}", escaped.file_name().unwrap().to_string_lossy());
+            let keys = [
+                "normal".to_owned(),
+                "foo/bar".to_owned(),
+                r"foo\bar".to_owned(),
+                traversal,
+                escaped.to_string_lossy().into_owned(),
+            ];
+
+            {
+                let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None), NO_COMPRESSION).await.unwrap();
+                for (index, key) in keys.iter().enumerate() {
+                    cache.put(key.clone(), vec![index as u8]).await.unwrap();
+                }
+                assert_eq!(fs::read_dir(temp_dir.as_ref()).unwrap().count(), keys.len());
+                assert!(!escaped.exists());
+                assert!(!temp_dir.as_ref().join("foo").exists());
+                assert!(fs::read_dir(temp_dir.as_ref()).unwrap().all(|entry| {
+                    let path = entry.unwrap().path();
+                    path.parent() == Some(temp_dir.as_ref()) && path.is_file()
+                }));
+            }
+
+            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None), NO_COMPRESSION).await.unwrap();
+            assert_eq!(cache.recover(|key| Some(key.to_owned())).await.unwrap(), keys.len());
+            for (index, key) in keys.iter().enumerate() {
+                assert_eq!(cache.get(key.clone()).await.unwrap().as_ref(), &[index as u8]);
+            }
+        }
+
+        async fn test_replace_accounting_capacity_and_failure() {
+            let temp_dir = TempDir::new();
+            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), Some(100), None), NO_COMPRESSION).await.unwrap();
+            cache.put("foo", vec![1; 100]).await.unwrap();
+            cache.put("foo", vec![2; 50]).await.unwrap();
+            assert_eq!(cache.get("foo").await.unwrap(), vec![2; 50]);
+            assert_eq!(cache.strategy().current_byte_count, 50);
+            assert_eq!(cache.strategy().current_entry_count, 1);
+            cache.put("foo", vec![5; 75]).await.unwrap();
+            assert_eq!(cache.strategy().current_byte_count, 75);
+            cache.put("foo", vec![2; 50]).await.unwrap();
+            cache.put("bar", vec![3; 50]).await.unwrap();
+            assert!(cache.put("foo", vec![4; 51]).await.is_err());
+            assert_eq!(cache.get("foo").await.unwrap(), vec![2; 50]);
+            assert_eq!(cache.strategy().current_byte_count, 100);
+            assert_eq!(cache.strategy().current_entry_count, 2);
+        }
+
+        async fn test_failed_disk_write_keeps_previous_entry() {
+            let temp_dir = TempDir::new();
+            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None), NO_COMPRESSION).await.unwrap();
+            cache.put("foo", b"old".to_vec()).await.unwrap();
+            fs::create_dir(cache_path(temp_dir.as_ref(), "foo").with_extension("tmp")).unwrap();
+
+            assert!(cache.put("foo", b"new".to_vec()).await.is_err());
+            assert_eq!(cache.get("foo").await.unwrap(), b"old".as_slice());
+            assert_eq!(cache.strategy().current_byte_count, 3);
+            assert_eq!(cache.strategy().current_entry_count, 1);
         }
     }
 }
