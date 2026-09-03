@@ -72,6 +72,11 @@ Bincache supports multiple async runtimes:
     ```
 3. That's it!
 
+## Upgrading to 0.6
+
+Custom strategies must implement `CacheStrategy::replace`. Disk recovery only
+reads `.bincache-v1/`. Older cache formats are ignored and must be repopulated.
+
 ## Library Features
 
 - `blocking` - Enables blocking stdlib I/O
