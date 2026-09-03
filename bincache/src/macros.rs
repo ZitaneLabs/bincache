@@ -7,14 +7,9 @@ macro_rules! reexport_strategy {
             $crate::cache_builder::CacheBuilderWithStrategy<$crate::strategies::$strategy>;
         pub use $crate::strategies::$strategy as $strategy_alias;
 
-        const _: () = {
-            fn assert_default<T: Default>() {}
-            fn assert_strategy<T: $crate::traits::CacheStrategy>() {}
-
-            fn assert_all() {
-                assert_default::<$crate::strategies::$strategy>();
-                assert_strategy::<$crate::strategies::$strategy>();
-            }
+        const _: fn() = {
+            fn assert_strategy<T: Default + $crate::traits::CacheStrategy>() {}
+            assert_strategy::<$crate::strategies::$strategy>
         };
     };
 }

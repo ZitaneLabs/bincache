@@ -459,17 +459,10 @@ mod tests {
             assert!(metadata(temp_dir.as_ref().join("baz")).unwrap().is_file());
             assert!(metadata(temp_dir.as_ref().join("bax")).unwrap().is_file());
 
-            match cache.put("quix", b"quix".to_vec()).await {
-                Err(err) => match err {
-                    Error::LimitExceeded { limit_kind } => {
-                        assert_eq!(limit_kind, LIMIT_KIND_BYTE_DISK);
-                    }
-                    _ => {
-                        panic!("Unexpected error: {:?}", err);
-                    }
-                },
-                _ => (),
-            }
+            assert!(matches!(
+                cache.put("quix", b"quix".to_vec()).await,
+                Err(Error::LimitExceeded { limit_kind }) if limit_kind == LIMIT_KIND_BYTE_DISK
+            ));
         }
 
         async fn test_strategy_with_memory_and_disk_entry_limit() {
@@ -493,17 +486,10 @@ mod tests {
             assert!(metadata(temp_dir.as_ref().join("baz")).unwrap().is_file());
             assert!(metadata(temp_dir.as_ref().join("bax")).unwrap().is_file());
 
-            match cache.put("quix", b"quix".to_vec()).await {
-                Err(err) => match err {
-                    Error::LimitExceeded { limit_kind } => {
-                        assert_eq!(limit_kind, LIMIT_KIND_ENTRY_DISK);
-                    }
-                    _ => {
-                        panic!("Unexpected error: {:?}", err);
-                    }
-                },
-                _ => (),
-            }
+            assert!(matches!(
+                cache.put("quix", b"quix".to_vec()).await,
+                Err(Error::LimitExceeded { limit_kind }) if limit_kind == LIMIT_KIND_ENTRY_DISK
+            ));
         }
 
         async fn test_recovery() {
