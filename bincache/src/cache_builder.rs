@@ -1,6 +1,6 @@
 use std::hash::Hash;
 
-use crate::{noop::Noop, Cache, CacheKey, CacheStrategy, CompressionStrategy, Result};
+use crate::{Cache, CacheKey, CacheStrategy, CompressionStrategy, Result, noop::Noop};
 
 /// A builder for creating a new [Cache].
 ///
@@ -145,7 +145,7 @@ mod tests {
 
     async_test! {
         async fn test_default() {
-            _ = CacheBuilder::default();
+            _ = CacheBuilder;
         }
 
         async fn test_type_aliased() {
@@ -154,7 +154,7 @@ mod tests {
         }
 
         async fn test_key_inference() {
-            let mut cache = CacheBuilder::default().with_strategy(Noop).build().await.unwrap();
+            let mut cache = CacheBuilder.with_strategy(Noop).build().await.unwrap();
             cache.put("test".to_string(), vec![]).await.unwrap();
         }
     }

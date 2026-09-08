@@ -103,8 +103,8 @@ impl CacheStrategy for Memory {
 
 #[cfg(test)]
 mod tests {
-    use super::{Memory, LIMIT_KIND_BYTE, LIMIT_KIND_ENTRY};
-    use crate::{async_test, Cache, Error, NO_COMPRESSION};
+    use super::{LIMIT_KIND_BYTE, LIMIT_KIND_ENTRY, Memory};
+    use crate::{Cache, Error, NO_COMPRESSION, async_test};
 
     async_test! {
         async fn test_default_strategy() {

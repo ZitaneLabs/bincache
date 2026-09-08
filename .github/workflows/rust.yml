@@ -6,6 +6,13 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
@@ -16,35 +23,48 @@ env:
 
 jobs:
   test:
-    runs-on: [ubuntu-latest]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: rustup toolchain install stable --profile minimal
-      - run: curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C ${CARGO_HOME:-~/.cargo}/bin
       - name: cargo test (blocking)
-        run: cargo nextest run --release
+        run: cargo test --workspace --locked --features comp_zstd,comp_brotli,comp_gzip
       - name: cargo test (tokio)
-        run: cargo nextest run --release --features rt_tokio_1
+        run: cargo test --workspace --locked --no-default-features --features rt_tokio_1,comp_zstd,comp_brotli,comp_gzip
       - name: cargo test (async-std)
-        run: cargo nextest run --release --features rt_async-std_1
-      - name: doctests
-        run: cargo test --doc
+        run: cargo test --workspace --locked --no-default-features --features rt_async-std_1,comp_zstd,comp_brotli,comp_gzip
+
+  msrv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install 1.85.0 --profile minimal
+      - name: cargo check (blocking)
+        run: cargo +1.85.0 check --workspace --locked --features comp_zstd,comp_brotli,comp_gzip
+      - name: cargo check (tokio)
+        run: cargo +1.85.0 check --workspace --locked --no-default-features --features rt_tokio_1,comp_zstd,comp_brotli,comp_gzip
+      - name: cargo check (async-std)
+        run: cargo +1.85.0 check --workspace --locked --no-default-features --features rt_async-std_1,comp_zstd,comp_brotli,comp_gzip
+
   clippy:
-    runs-on: [ubuntu-latest]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - run: rustup toolchain install stable --profile minimal
-      - run: rustup component add clippy
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install stable --profile minimal --component clippy
       - name: cargo clippy (blocking)
-        run: cargo clippy
+        run: cargo clippy --workspace --all-targets --locked --features comp_zstd,comp_brotli,comp_gzip -- -D warnings
       - name: cargo clippy (tokio)
-        run: cargo clippy --features rt_tokio_1
+        run: cargo clippy --workspace --all-targets --locked --no-default-features --features rt_tokio_1,comp_zstd,comp_brotli,comp_gzip -- -D warnings
       - name: cargo clippy (async-std)
-        run: cargo clippy --features rt_async-std_1
+        run: cargo clippy --workspace --all-targets --locked --no-default-features --features rt_async-std_1,comp_zstd,comp_brotli,comp_gzip -- -D warnings
+
   rustfmt:
-    runs-on: [ubuntu-latest]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - run: rustup toolchain install stable --profile minimal
-      - run: rustup component add rustfmt
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install stable --profile minimal --component rustfmt
       - run: cargo fmt --all --check

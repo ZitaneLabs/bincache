@@ -6,8 +6,8 @@ use std::{
 };
 
 use crate::{
-    traits::{CacheKey, CacheStrategy, RecoverableStrategy},
     CacheCapacity, DiskUtil, Result,
+    traits::{CacheKey, CacheStrategy, RecoverableStrategy},
 };
 
 const LIMIT_KIND_BYTE: &str = "Stored bytes";
@@ -206,7 +206,7 @@ impl RecoverableStrategy for Disk {
 #[cfg(test)]
 mod tests {
     use super::{Disk, LIMIT_KIND_BYTE, LIMIT_KIND_ENTRY};
-    use crate::{async_test, utils::test::TempDir, Cache, Error, NO_COMPRESSION};
+    use crate::{Cache, Error, NO_COMPRESSION, async_test, utils::test::TempDir};
 
     async_test! {
         async fn test_default() {
@@ -257,20 +257,15 @@ mod tests {
             assert_eq!(cache.get("foo").await.unwrap(), foo_data.as_slice());
             assert_eq!(cache.get("bar").await.unwrap(), bar_data.as_slice());
 
-            match cache.put("baz", baz_data).await {
-                Err(err) => match err {
-                    Error::LimitExceeded { limit_kind } => {
-                        assert_eq!(limit_kind, LIMIT_KIND_BYTE);
-                    }
-                    _ => panic!("Unexpected error: {:?}", err),
-                },
-                _ => (),
-            }
+            assert!(matches!(
+                cache.put("baz", baz_data).await,
+                Err(Error::LimitExceeded { limit_kind }) if limit_kind == LIMIT_KIND_BYTE
+            ));
         }
 
         async fn test_strategy_with_entry_limit() {
             let temp_dir = TempDir::new();
-            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, Some(3)), NO_COMPRESSION).await.unwrap();
+            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, Some(2)), NO_COMPRESSION).await.unwrap();
 
             cache.put("foo", b"foo".to_vec()).await.unwrap();
             cache.put("bar", b"bar".to_vec()).await.unwrap();
@@ -278,15 +273,10 @@ mod tests {
             assert_eq!(cache.get("foo").await.unwrap(), b"foo".as_slice());
             assert_eq!(cache.get("bar").await.unwrap(), b"bar".as_slice());
 
-            match cache.put("baz", b"baz".to_vec()).await {
-                Err(err) => match err {
-                    Error::LimitExceeded { limit_kind } => {
-                        assert_eq!(limit_kind, LIMIT_KIND_ENTRY);
-                    }
-                    _ => panic!("Unexpected error: {:?}", err),
-                },
-                _ => (),
-            }
+            assert!(matches!(
+                cache.put("baz", b"baz".to_vec()).await,
+                Err(Error::LimitExceeded { limit_kind }) if limit_kind == LIMIT_KIND_ENTRY
+            ));
         }
 
         async fn test_recovery() {

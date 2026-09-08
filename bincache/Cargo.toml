@@ -1,7 +1,7 @@
 [package]
 name = "bincache"
 version = "0.5.1"
-edition = "2021"
+edition = "2024"
 description = "ZitaneLabs binary cache."
 authors.workspace = true
 license.workspace = true
@@ -20,26 +20,25 @@ comp_brotli = ["async-compression/brotli"]
 comp_gzip = ["async-compression/gzip"]
 
 [dependencies]
-paste = "1"
-thiserror = "1"
-async-trait = "0.1"
-async-compression = "0.4"
+thiserror = "2.0.20"
+async-trait = "0.1.92"
+async-compression = "0.4.43"
 
 [dependencies.tokio]
-version = "1"
+version = "1.53.1"
 features = ["rt", "fs", "io-util"]
 optional = true
 
 [dependencies.async-std]
-version = "1"
+version = "1.13.2"
 optional = true
 
 [dependencies.futures-util]
-version = "0.3"
+version = "0.3.34"
 features = ["io"]
 optional = true
 
 [dev-dependencies]
-uuid = { version = "1.8", features = ["v4"] }
-tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros"] }
-async-std = { version = "1", features = ["attributes"] }
+uuid = { version = "1.26.0", features = ["v4"] }
+tokio = { version = "1.53.1", features = ["rt", "rt-multi-thread", "macros"] }
+async-std = { version = "1.13.2", features = ["attributes"] }
