@@ -42,11 +42,25 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: rustup toolchain install 1.85.0 --profile minimal
       - name: cargo check (blocking)
-        run: cargo +1.85.0 check --workspace --locked --features comp_zstd,comp_brotli,comp_gzip
+        run: cargo +1.85.0 check --workspace --all-targets --locked --features comp_zstd,comp_brotli,comp_gzip
       - name: cargo check (tokio)
-        run: cargo +1.85.0 check --workspace --locked --no-default-features --features rt_tokio_1,comp_zstd,comp_brotli,comp_gzip
+        run: cargo +1.85.0 check --workspace --all-targets --locked --no-default-features --features rt_tokio_1,comp_zstd,comp_brotli,comp_gzip
       - name: cargo check (async-std)
-        run: cargo +1.85.0 check --workspace --locked --no-default-features --features rt_async-std_1,comp_zstd,comp_brotli,comp_gzip
+        run: cargo +1.85.0 check --workspace --all-targets --locked --no-default-features --features rt_async-std_1,comp_zstd,comp_brotli,comp_gzip
+
+  benchmarks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        io: [blocking, rt_tokio_1, rt_async-std_1]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install stable --profile minimal
+      - name: Build benchmarks (no measurements)
+        run: cargo bench --workspace --locked --bench cache --no-run --no-default-features --features ${{ matrix.io }},comp_zstd,comp_brotli,comp_gzip
+      - name: Smoke-test benchmark workloads (no measurements)
+        run: cargo bench --workspace --locked --bench cache --no-default-features --features ${{ matrix.io }},comp_zstd,comp_brotli,comp_gzip -- --test
 
   clippy:
     runs-on: ubuntu-latest
