@@ -1,3 +1,5 @@
+//! Typed builders for choosing storage and optional compression before setup.
+
 use std::hash::Hash;
 
 use crate::{Cache, CacheKey, CacheStrategy, CompressionStrategy, Result, noop::Noop};
@@ -21,6 +23,10 @@ use crate::{Cache, CacheKey, CacheStrategy, CompressionStrategy, Result, noop::N
 #[derive(Debug, Default)]
 pub struct CacheBuilder;
 
+/// Builder with storage selected and compression disabled.
+///
+/// `Default` uses the strategy's defaults; disk/hybrid default to `./cache`.
+/// Build directly or select compression with [`Self::with_compression`].
 pub struct CacheBuilderWithStrategy<S> {
     strategy: S,
 }
@@ -36,6 +42,7 @@ where
     }
 }
 
+/// Builder with a compressor selected; choose storage with [`Self::with_strategy`].
 pub struct CacheBuilderWithCompression<C> {
     compressor: C,
 }
@@ -51,6 +58,7 @@ where
     }
 }
 
+/// Builder with both storage and compression selected, ready for setup.
 pub struct CacheBuilderWithCompressionAndStrategy<S, C> {
     strategy: S,
     compressor: C,
@@ -70,7 +78,7 @@ where
 }
 
 impl CacheBuilder {
-    /// Add a strategy to the cache
+    /// Select storage; setup is deferred until `build().await`.
     pub fn with_strategy<S>(self, strategy: S) -> CacheBuilderWithStrategy<S>
     where
         S: CacheStrategy,
@@ -78,7 +86,7 @@ impl CacheBuilder {
         CacheBuilderWithStrategy { strategy }
     }
 
-    /// Add a compression algorithm to the cache
+    /// Select the codec applied before writes and after reads/takes.
     pub fn with_compression<C>(self, compressor: C) -> CacheBuilderWithCompression<C>
     where
         C: CompressionStrategy,
@@ -88,7 +96,7 @@ impl CacheBuilder {
 }
 
 impl<C> CacheBuilderWithCompression<C> {
-    /// Add a strategy to the cache
+    /// Select storage; setup is deferred until `build().await`.
     pub fn with_strategy<S>(self, strategy: S) -> CacheBuilderWithCompressionAndStrategy<S, C> {
         {
             CacheBuilderWithCompressionAndStrategy {
@@ -103,7 +111,7 @@ impl<S> CacheBuilderWithStrategy<S>
 where
     S: CacheStrategy + Send,
 {
-    /// Add a compression algorithm to the cache
+    /// Select the codec applied before writes and after reads/takes.
     pub fn with_compression<C>(self, compressor: C) -> CacheBuilderWithCompressionAndStrategy<S, C>
     where
         C: CompressionStrategy,
@@ -114,7 +122,13 @@ where
         }
     }
 
-    /// Build the cache without using compression
+    /// Set up storage and create an empty cache without compression.
+    ///
+    /// The key type is inferred from later operations or selected with `build::<K>()`.
+    /// Existing disk data requires an explicit [`Cache::recover`] call.
+    ///
+    /// # Errors
+    /// Returns strategy setup errors, including directory creation failures.
     pub async fn build<K>(self) -> Result<Cache<K, S, Noop>>
     where
         K: CacheKey + Eq + Hash + Sync + Send,
@@ -128,6 +142,13 @@ where
     S: CacheStrategy + Send,
     C: CompressionStrategy,
 {
+    /// Set up storage and create an empty cache using the selected compressor.
+    ///
+    /// Existing disk data requires an explicit [`Cache::recover`] call with the
+    /// same codec and key mapping used when writing it.
+    ///
+    /// # Errors
+    /// Returns strategy setup errors, including directory creation failures.
     pub async fn build<K>(self) -> Result<Cache<K, S, C>>
     where
         K: CacheKey + Eq + Hash + Sync + Send,

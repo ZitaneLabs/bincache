@@ -7,7 +7,7 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-readme.workspace = true
+readme = "README.md"
 
 [features]
 default = ["implicit-blocking"]
@@ -49,3 +49,6 @@ async-std = { version = "1.13.2", features = ["attributes"] }
 [[bench]]
 name = "cache"
 harness = false
+
+[package.metadata.docs.rs]
+features = ["comp_gzip", "comp_brotli", "comp_zstd"]

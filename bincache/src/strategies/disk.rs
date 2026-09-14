@@ -47,6 +47,7 @@ pub(crate) async fn write_entry(path: &Path, key: &str, value: &[u8]) -> Result<
     Ok(())
 }
 
+/// A stored file reference and its accounted payload length.
 #[derive(Debug)]
 pub struct Entry {
     path: PathBuf,
@@ -55,8 +56,16 @@ pub struct Entry {
 
 /// Disk-based cache strategy.
 ///
-/// This strategy stores entries on disk. It can be configured to limit the
-/// number of bytes and/or entries that can be stored.
+/// Stores one file per key, defaulting to unlimited storage in `./cache`.
+/// Limits reject writes instead of evicting entries; bytes count stored payload
+/// lengths, excluding headers and filesystem overhead. Reads load the whole file.
+///
+/// Writes sync file data before renaming a sibling temporary file into place;
+/// the parent directory is not synced. This is not a crash-durability guarantee.
+/// Dropping a cache leaves files on disk; recovering its index is explicit.
+/// Use one live cache per dedicated directory. The format is an implementation
+/// detail without cross-version compatibility guarantees.
+/// See [persistence and recovery limitations](crate#semantics-and-guarantees).
 #[derive(Debug)]
 pub struct Disk {
     /// The directory where entries are stored.
@@ -72,7 +81,11 @@ pub struct Disk {
 }
 
 impl Disk {
-    /// Create a new disk cache strategy.
+    /// Select a directory and independent stored-byte and entry-count limits.
+    ///
+    /// `None` is unlimited. Construction itself does no I/O; cache setup creates
+    /// missing directories and can fail. It does not recover existing files.
+    /// See the [disk/restart example](crate#disk-caching-and-recovery-after-restart).
     pub fn new<'a>(
         cache_dir: impl Into<Cow<'a, Path>>,
         byte_limit: Option<usize>,

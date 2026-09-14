@@ -52,10 +52,16 @@ pub struct DiskEntry {
 /// A hybrid cache entry.
 #[derive(Debug)]
 pub enum Entry {
+    /// A volatile payload; reads do not migrate it.
     Memory(MemoryEntry),
+    /// A file reference; reads do not promote it to memory.
     Disk(DiskEntry),
 }
 
+/// Independent stored-byte and entry-count limits for one hybrid tier.
+///
+/// Defaults to unlimited. Byte accounting excludes keys and metadata and occurs
+/// after compression. Limits reject placement instead of evicting older entries.
 #[derive(Debug, Default)]
 pub struct Limits {
     /// The maximum number of bytes that can be stored.
@@ -69,6 +75,9 @@ pub struct Limits {
 }
 
 impl Limits {
+    /// Set limits for a tier, initially with zero tracked usage.
+    ///
+    /// `None` is unlimited; `Some(0)` allows no bytes or entries respectively.
     pub fn new(byte_limit: Option<usize>, entry_limit: Option<usize>) -> Self {
         Self {
             byte_limit,
@@ -106,8 +115,17 @@ impl Limits {
 
 /// Hybrid cache strategy.
 ///
-/// This strategy stores entries on memory and flushed entries to disk if memory doesn't suffice.
-/// It can be configured to limit the number of bytes and/or entries that can be stored.
+/// New and replacement values prefer memory if both memory limits permit;
+/// otherwise they go to disk if both disk limits permit. Existing entries are
+/// not evicted to make room. A replacement may move in either direction, and
+/// a move from disk to memory deletes the previous file. Reads never change tiers.
+///
+/// [`crate::Cache::flush`] moves memory entries to disk explicitly; dropping a
+/// cache does not flush. Only disk entries can be recovered, and they remain on
+/// disk. Defaults use `./cache` and unlimited tiers, so new values stay in memory
+/// until flushed. [`crate::Cache::capacity`] reports totals only when both tiers
+/// have byte limits. See the [hybrid example](crate#hybrid-caching) and
+/// [persistence limitations](crate#semantics-and-guarantees).
 #[derive(Debug)]
 pub struct Hybrid {
     /// The directory where entries are stored.
@@ -129,6 +147,10 @@ impl Default for Hybrid {
 }
 
 impl Hybrid {
+    /// Select a disk directory and separate memory/disk limits.
+    ///
+    /// Construction performs no I/O; setup creates the directory without
+    /// recovering it. Configure a memory limit to enable automatic spillover.
     pub fn new<'a>(
         cache_dir: impl Into<Cow<'a, Path>>,
         memory_limits: Limits,

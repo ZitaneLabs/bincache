@@ -1,8 +1,14 @@
 /// A cache key.
 ///
-/// Keys should be unique and deterministic.
-/// The same key should always return the same value.
+/// Keys must produce deterministic strings, unique for unequal keys. Disk
+/// strategies hash this string into a filename and persist it for recovery.
+/// Distinct keys with the same string can overwrite the same disk file even
+/// though the in-memory index treats them as different keys.
+///
+/// Every `ToString` type has a blanket implementation, including strings and
+/// integers. Recovery callbacks must map the stored string back to the same key.
 pub trait CacheKey {
+    /// Return the stable, unique string used by persistent strategies.
     fn to_key(&self) -> String;
 }
 

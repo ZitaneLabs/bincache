@@ -4,6 +4,11 @@ use crate::traits::CompressionStrategy;
 use async_trait::async_trait;
 use std::borrow::Cow;
 
+/// Gzip codec, available with the `comp_gzip` feature.
+///
+/// Processes complete buffers and allocates output on each call. `Default` uses
+/// the underlying codec's default level; CPU work runs in the calling future.
+/// See the [compression example](crate#compression).
 #[derive(Debug)]
 pub struct Gzip {
     level: CompressionLevel,

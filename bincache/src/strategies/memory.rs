@@ -6,6 +6,7 @@ use crate::{CacheCapacity, CacheKey, CacheStrategy, Result};
 const LIMIT_KIND_BYTE: &str = "Stored bytes";
 const LIMIT_KIND_ENTRY: &str = "Stored entries";
 
+/// Owned stored payload and its accounted byte length.
 #[derive(Debug)]
 pub struct Entry {
     data: Vec<u8>,
@@ -14,8 +15,11 @@ pub struct Entry {
 
 /// Memory-based cache strategy.
 ///
-/// This strategy stores entries in memory. It can be configured to limit the
-/// number of bytes and/or entries that can be stored.
+/// Stores complete payloads in RAM and borrows them on uncompressed reads.
+/// Defaults to unlimited storage. Limits reject writes instead of evicting
+/// entries; byte limits count payload bytes after compression, not allocation
+/// overhead. Replacement accounts for the old value's size and keeps its entry
+/// slot. Data is volatile; recovery and flushing are not supported.
 #[derive(Default, Debug)]
 pub struct Memory {
     /// The maximum number of bytes that can be stored.
@@ -29,7 +33,10 @@ pub struct Memory {
 }
 
 impl Memory {
-    /// Create a new memory cache strategy.
+    /// Configure independent stored-byte and entry-count limits.
+    ///
+    /// `None` is unlimited; `Some(0)` permits zero bytes or zero entries.
+    /// See the [capacity example](crate#memory-capacity-limits).
     pub fn new(byte_limit: Option<usize>, entry_limit: Option<usize>) -> Self {
         Self {
             byte_limit,

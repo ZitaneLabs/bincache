@@ -5,12 +5,18 @@ use std::borrow::Cow;
 /// Do not match on this type directly, as new variants may be added in the future.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// The key is absent from the in-memory index.
     #[error("Key not found in cache.")]
     KeyNotFound,
 
+    /// A configured storage-byte or entry-count limit would be exceeded.
     #[error("Cache limit exceeded: {limit_kind}")]
-    LimitExceeded { limit_kind: Cow<'static, str> },
+    LimitExceeded {
+        /// Human-readable description of the exceeded dimension/tier.
+        limit_kind: Cow<'static, str>,
+    },
 
+    /// Filesystem or built-in codec I/O failed; inspect the source for details.
     #[error("I/O error: {0}")]
     IoError(#[from] std::io::Error),
 
@@ -34,4 +40,5 @@ pub enum Error {
     },
 }
 
+/// Result type returned by cache, storage, and compression operations.
 pub type Result<T> = std::result::Result<T, Error>;

@@ -1,4 +1,8 @@
-/// Compression level variants
+/// Algorithm-specific CPU/size tuning for a compressor.
+///
+/// The meaning and accepted numeric range depend on the codec. Levels are not
+/// comparable across algorithms, and smaller output is not always worth the CPU
+/// cost. Benchmark representative inputs before selecting a level.
 #[derive(Debug, Clone, Copy)]
 pub enum CompressionLevel {
     /// Best compression level for the given compression algorithm
