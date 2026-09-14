@@ -37,9 +37,9 @@ impl CompressionStrategy for Zstd {
                 write::ZstdEncoder::with_quality(Vec::with_capacity(data.len()), self.level.into());
             encoder.write_all(data.as_ref()).await?;
             encoder.shutdown().await?;
-            return Ok(encoder.into_inner().into());
+            Ok(encoder.into_inner().into())
         }
-        #[cfg(any(feature = "blocking", feature = "implicit-blocking"))]
+        #[cfg(not(feature = "rt_tokio_1"))]
         {
             use async_compression::futures::write;
             use futures_util::AsyncWriteExt;
@@ -47,17 +47,7 @@ impl CompressionStrategy for Zstd {
                 write::ZstdEncoder::with_quality(Vec::with_capacity(data.len()), self.level.into());
             encoder.write_all(data.as_ref()).await?;
             encoder.close().await?;
-            return Ok(encoder.into_inner().into());
-        }
-        #[cfg(feature = "rt_async-std_1")]
-        {
-            use async_compression::futures::write;
-            use async_std::io::WriteExt;
-            let mut encoder =
-                write::ZstdEncoder::with_quality(Vec::with_capacity(data.len()), self.level.into());
-            encoder.write_all(data.as_ref()).await?;
-            encoder.flush().await?;
-            return Ok(encoder.into_inner().into());
+            Ok(encoder.into_inner().into())
         }
     }
 
@@ -69,25 +59,16 @@ impl CompressionStrategy for Zstd {
             let mut encoder = write::ZstdDecoder::new(Vec::with_capacity(data.len()));
             encoder.write_all(data.as_ref()).await?;
             encoder.shutdown().await?;
-            return Ok(encoder.into_inner().into());
+            Ok(encoder.into_inner().into())
         }
-        #[cfg(any(feature = "blocking", feature = "implicit-blocking"))]
+        #[cfg(not(feature = "rt_tokio_1"))]
         {
             use async_compression::futures::write;
             use futures_util::AsyncWriteExt;
             let mut encoder = write::ZstdDecoder::new(Vec::with_capacity(data.len()));
             encoder.write_all(data.as_ref()).await?;
             encoder.close().await?;
-            return Ok(encoder.into_inner().into());
-        }
-        #[cfg(feature = "rt_async-std_1")]
-        {
-            use async_compression::futures::write;
-            use async_std::io::WriteExt;
-            let mut encoder = write::ZstdDecoder::new(Vec::with_capacity(data.len()));
-            encoder.write_all(data.as_ref()).await?;
-            encoder.flush().await?;
-            return Ok(encoder.into_inner().into());
+            Ok(encoder.into_inner().into())
         }
     }
 }
