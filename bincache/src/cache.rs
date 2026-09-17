@@ -38,11 +38,18 @@ where
     }
 
     /// Put an entry into the cache.
+    ///
+    /// An existing key is replaced through [`CacheStrategy::replace`]. If
+    /// compression or replacement fails, the previous entry remains available.
     pub async fn put<'a, V>(&mut self, key: K, value: V) -> Result<()>
     where
         V: Into<Cow<'a, [u8]>> + Send,
     {
         let value: Cow<'_, [u8]> = self.compressor.compress(value.into()).await?;
+
+        if let Some(entry) = self.data.get_mut(&key) {
+            return self.strategy.replace(&key, entry, value).await;
+        }
 
         let entry = self.strategy.put(&key, value).await?;
         self.data.insert(key, entry);

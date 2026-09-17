@@ -12,11 +12,127 @@ use crate::{
 
 const LIMIT_KIND_BYTE: &str = "Stored bytes";
 const LIMIT_KIND_ENTRY: &str = "Stored entries";
+const FILE_MAGIC: &[u8; 8] = b"BINCACHE";
+pub(crate) const FORMAT_DIR: &str = ".bincache-v1";
 
+pub(crate) fn cache_path(cache_dir: &Path, key: &str) -> PathBuf {
+    cache_dir
+        .join(FORMAT_DIR)
+        .join(blake3::hash(key.as_bytes()).to_hex().as_str())
+}
+
+#[cfg(test)]
+pub(crate) fn encode_entry(key: &str, value: &[u8]) -> Vec<u8> {
+    let mut encoded = Vec::with_capacity(FILE_MAGIC.len() + 8 + key.len() + value.len());
+    encoded.extend_from_slice(FILE_MAGIC);
+    encoded.extend_from_slice(&(key.len() as u64).to_le_bytes());
+    encoded.extend_from_slice(key.as_bytes());
+    encoded.extend_from_slice(value);
+    encoded
+}
+
+fn decode_key_len(header: &[u8]) -> Option<usize> {
+    if header.get(..8)? != FILE_MAGIC {
+        return None;
+    }
+    usize::try_from(u64::from_le_bytes(header.get(8..16)?.try_into().ok()?)).ok()
+}
+
+pub(crate) fn decode_entry(encoded: &[u8]) -> Option<(&str, &[u8])> {
+    let key_len = decode_key_len(encoded)?;
+    let key_end = 16usize.checked_add(key_len)?;
+    let key = std::str::from_utf8(encoded.get(16..key_end)?).ok()?;
+    Some((key, encoded.get(key_end..)?))
+}
+
+fn invalid_entry() -> crate::Error {
+    crate::Error::Custom {
+        message: "Invalid disk cache entry".into(),
+    }
+}
+
+/// A disk entry, shared by the disk and hybrid strategies.
 #[derive(Debug)]
 pub struct Entry {
-    path: PathBuf,
-    byte_len: usize,
+    pub(crate) path: PathBuf,
+    pub(crate) byte_len: usize,
+}
+
+impl Entry {
+    pub(crate) fn new(cache_dir: &Path, key: &str, byte_len: usize) -> Self {
+        Self {
+            path: cache_path(cache_dir, key),
+            byte_len,
+        }
+    }
+
+    pub(crate) async fn read(&self) -> Result<Vec<u8>> {
+        let mut file = DiskUtil::Reader::open(&self.path).await?;
+        let mut header = [0; 16];
+        file.read_exact(&mut header).await?;
+        let key_len = decode_key_len(&header).ok_or_else(invalid_entry)?;
+        let key = file.read(key_len as u64, None).await?;
+        if key.len() != key_len || std::str::from_utf8(&key).is_err() {
+            return Err(invalid_entry());
+        }
+        drop(key);
+        // The payload is read directly into its final, preallocated buffer.
+        file.read(u64::MAX, Some(self.byte_len)).await
+    }
+
+    pub(crate) async fn write(&self, key: &str, value: &[u8]) -> Result<()> {
+        let tmp_path = self.path.with_extension("tmp");
+        let key_len = (key.len() as u64).to_le_bytes();
+        let result = async {
+            DiskUtil::write_parts(&tmp_path, &[FILE_MAGIC, &key_len, key.as_bytes(), value])
+                .await?;
+            DiskUtil::rename(&tmp_path, &self.path).await
+        }
+        .await;
+        if result.is_err() {
+            _ = DiskUtil::delete(&tmp_path).await;
+        }
+        result
+    }
+}
+
+pub(crate) async fn recover_entries<K, F>(
+    cache_dir: &Path,
+    recover_key: F,
+) -> Result<Vec<(K, Entry)>>
+where
+    F: Fn(&str) -> Option<K>,
+{
+    let mut entries = Vec::new();
+    let dir = cache_dir.join(FORMAT_DIR);
+    let lost_found = dir.join("lost+found");
+    DiskUtil::create_dir(&lost_found).await?;
+    for path in DiskUtil::files(&dir).await? {
+        let Some(name) = path.file_name() else {
+            continue;
+        };
+        if path.extension().is_some_and(|ext| ext == "tmp") {
+            // A synced temporary file has not passed the rename commit point.
+            _ = DiskUtil::rename(&path, &lost_found.join(name)).await;
+            continue;
+        }
+        let data = match DiskUtil::read(&path, None).await {
+            Ok(data) => data,
+            Err(_) => {
+                _ = DiskUtil::rename(&path, &lost_found.join(name)).await;
+                continue;
+            }
+        };
+        let decoded = decode_entry(&data).filter(|(key, _)| cache_path(cache_dir, key) == path);
+        let recovered =
+            decoded.and_then(|(key, value)| recover_key(key).map(|key| (key, value.len())));
+        let Some((key, byte_len)) = recovered else {
+            _ = DiskUtil::rename(&path, &lost_found.join(name)).await;
+            continue;
+        };
+        entries.push((key, Entry { path, byte_len }));
+    }
+    Ok(entries)
 }
 
 /// Disk-based cache strategy.
@@ -70,7 +186,7 @@ impl CacheStrategy for Disk {
     type CacheEntry = Entry;
 
     async fn setup(&mut self) -> Result<()> {
-        DiskUtil::create_dir(&self.cache_dir).await
+        DiskUtil::create_dir(self.cache_dir.join(FORMAT_DIR)).await
     }
 
     async fn put<'a, K, V>(&mut self, key: &K, value: V) -> Result<Self::CacheEntry>
@@ -100,24 +216,49 @@ impl CacheStrategy for Disk {
         }
 
         // Write to disk
-        let path = self.cache_dir.join(key.to_key());
-        DiskUtil::write(&path, value.as_ref()).await?;
+        let key = key.to_key();
+        let entry = Entry::new(&self.cache_dir, &key, byte_len);
+        entry.write(&key, value.as_ref()).await?;
 
         // Increment limits
         self.current_byte_count += byte_len;
         self.current_entry_count += 1;
 
-        Ok(Entry { path, byte_len })
+        Ok(entry)
     }
 
     async fn get<'a>(&self, entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>> {
-        DiskUtil::read(&entry.path, Some(entry.byte_len))
-            .await
-            .map(Cow::Owned)
+        Ok(Cow::Owned(entry.read().await?))
+    }
+
+    async fn replace<'a, K, V>(
+        &mut self,
+        key: &K,
+        entry: &mut Self::CacheEntry,
+        value: V,
+    ) -> Result<()>
+    where
+        K: CacheKey + Sync + Send,
+        V: Into<Cow<'a, [u8]>> + Send,
+    {
+        let value = value.into();
+        let byte_len = value.len();
+        let new_total = self.current_byte_count - entry.byte_len + byte_len;
+        if self.byte_limit.is_some_and(|limit| new_total > limit) {
+            return Err(crate::Error::LimitExceeded {
+                limit_kind: LIMIT_KIND_BYTE.into(),
+            });
+        }
+
+        let key = key.to_key();
+        entry.write(&key, &value).await?;
+        entry.byte_len = byte_len;
+        self.current_byte_count = new_total;
+        Ok(())
     }
 
     async fn take(&mut self, entry: Self::CacheEntry) -> Result<Vec<u8>> {
-        let data = DiskUtil::read(&entry.path, Some(entry.byte_len)).await?;
+        let data = self.get(&entry).await?.into_owned();
         self.delete(entry).await?;
 
         Ok(data)
@@ -141,74 +282,76 @@ impl CacheStrategy for Disk {
 
 #[async_trait]
 impl RecoverableStrategy for Disk {
-    async fn recover<K, F>(&mut self, mut recover_key: F) -> Result<Vec<(K, Self::CacheEntry)>>
+    async fn recover<K, F>(&mut self, recover_key: F) -> Result<Vec<(K, Self::CacheEntry)>>
     where
         K: Send,
         F: Fn(&str) -> Option<K> + Send,
     {
-        // Create the `lost+found` directory
-        let lost_found_dir = self.cache_dir.join("lost+found");
-        std::fs::create_dir_all(&lost_found_dir)?;
-
-        // Closure to move files to the `lost+found` directory
-        let move_to_lost_found = |source: &Path| {
-            // We explcitly ignore any errors here, as we don't want to fail
-            // the entire recovery process because of a single file.
-            let Some(file_name) = source.file_name() else {
-                return;
-            };
-            let target_path = lost_found_dir.join(file_name);
-            _ = std::fs::rename(source, target_path);
-        };
-
-        // Iterate over all files in the cache directory
-        let mut entries = Vec::new();
-        for entry in std::fs::read_dir(&self.cache_dir)?.filter_map(|e| e.ok()) {
-            let path = entry.path();
-
-            // Skip directories
-            if path.is_dir() {
-                continue;
-            }
-
-            // If key recovery fails, we move the entry to the `lost+found` directory.
-            let Some(key) = path
-                .file_name()
-                .and_then(|p| p.to_str())
-                .and_then(&mut recover_key)
-            else {
-                move_to_lost_found(&path);
-                continue;
-            };
-
-            // Read file
-            let buf = DiskUtil::read(&path, None).await?;
-
-            // Increment limits
-            self.current_byte_count += buf.len();
-            self.current_entry_count += 1;
-
-            // Push entry
-            entries.push((
-                key,
-                Entry {
-                    path,
-                    byte_len: buf.len(),
-                },
-            ));
+        let entries = recover_entries(&self.cache_dir, recover_key).await?;
+        for (_, entry) in &entries {
+            self.current_byte_count += entry.byte_len;
         }
-
-        // Return recovered entries
+        self.current_entry_count += entries.len();
         Ok(entries)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Disk, LIMIT_KIND_BYTE, LIMIT_KIND_ENTRY};
+    use std::fs;
+
+    use super::{
+        Disk, Entry, FORMAT_DIR, LIMIT_KIND_BYTE, LIMIT_KIND_ENTRY, cache_path, encode_entry,
+    };
     use crate::{Cache, Error, NO_COMPRESSION, async_test, utils::test::TempDir};
 
     async_test! {
+        async fn test_read_preallocates_only_payload() {
+            let dir = TempDir::new();
+            let key = "🔑".repeat(16 * 1024);
+            let value = vec![0xa5; 100];
+            let mut entry = Entry::new(dir.as_ref(), &key, value.len());
+            crate::DiskUtil::create_dir(dir.as_ref().join(FORMAT_DIR)).await.unwrap();
+            entry.write(&key, &value).await.unwrap();
+            // A hint larger than the payload demonstrates that the reader uses
+            // byte_len, while a much larger key must not inflate that buffer.
+            entry.byte_len = 4096;
+            let read = entry.read().await.unwrap();
+            assert_eq!(read, value);
+            assert!(read.capacity() >= entry.byte_len);
+            assert!(read.capacity() < key.len());
+        }
+
+        async fn test_read_rejects_invalid_headers_and_keys() {
+            let dir = TempDir::new();
+            let mut oversized = b"BINCACHE".to_vec();
+            oversized.extend_from_slice(&u64::MAX.to_le_bytes());
+            let mut invalid_utf8 = encode_entry("a", b"value");
+            invalid_utf8[16] = 0xff;
+            let mut truncated_key = encode_entry("key", b"");
+            truncated_key.pop();
+            let mut bad_magic = encode_entry("key", b"value");
+            bad_magic[0] = b'?';
+            let entry = Entry::new(dir.as_ref(), "key", 0);
+            crate::DiskUtil::create_dir(dir.as_ref().join(FORMAT_DIR)).await.unwrap();
+            for encoded in [b"BINCACHE".to_vec(), oversized, invalid_utf8, truncated_key, bad_magic] {
+                fs::write(&entry.path, encoded).unwrap();
+                assert!(entry.read().await.is_err());
+            }
+        }
+
+        async fn test_segmented_write_round_trip() {
+            let dir = TempDir::new();
+            let mut disk = Disk::new(dir.as_ref(), None, None);
+            crate::CacheStrategy::setup(&mut disk).await.unwrap();
+            for (key, value) in [("", Vec::new()), ("a/🔑\\key", vec![0xa5; 2 * 1024 * 1024])] {
+                let entry = Entry::new(dir.as_ref(), key, value.len());
+                entry.write(key, &value).await.unwrap();
+                assert_eq!(fs::read(&entry.path).unwrap(), encode_entry(key, &value));
+                assert_eq!(entry.read().await.unwrap(), value);
+            }
+        }
+
         async fn test_default() {
             let temp_dir = TempDir::new();
             let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None), NO_COMPRESSION).await.unwrap();
@@ -302,6 +445,84 @@ mod tests {
                 assert_eq!(cache.strategy().current_byte_count, 6);
                 assert_eq!(cache.strategy().current_entry_count, 2);
             }
+        }
+
+        async fn test_safe_keys_and_recovery() {
+            let temp_dir = TempDir::new();
+            let escaped = temp_dir.as_ref().with_extension("escaped");
+            let traversal = format!("../{}", escaped.file_name().unwrap().to_string_lossy());
+            let keys = [
+                "normal".to_owned(),
+                "foo/bar".to_owned(),
+                r"foo\bar".to_owned(),
+                traversal,
+                escaped.to_string_lossy().into_owned(),
+            ];
+
+            {
+                let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None), NO_COMPRESSION).await.unwrap();
+                for (index, key) in keys.iter().enumerate() {
+                    cache.put(key.clone(), vec![index as u8]).await.unwrap();
+                }
+                let entries_dir = temp_dir.as_ref().join(FORMAT_DIR);
+                assert_eq!(fs::read_dir(&entries_dir).unwrap().count(), keys.len());
+                assert!(!escaped.exists());
+                assert!(!temp_dir.as_ref().join("foo").exists());
+                assert!(fs::read_dir(&entries_dir).unwrap().all(|entry| {
+                    let path = entry.unwrap().path();
+                    path.parent() == Some(entries_dir.as_path()) && path.is_file()
+                }));
+            }
+
+            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None), NO_COMPRESSION).await.unwrap();
+            assert_eq!(cache.recover(|key| Some(key.to_owned())).await.unwrap(), keys.len());
+            for (index, key) in keys.iter().enumerate() {
+                assert_eq!(cache.get(key.clone()).await.unwrap().as_ref(), &[index as u8]);
+            }
+        }
+
+        async fn test_replace_accounting_capacity_and_failure() {
+            let temp_dir = TempDir::new();
+            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), Some(100), None), NO_COMPRESSION).await.unwrap();
+            cache.put("foo", vec![1; 100]).await.unwrap();
+            cache.put("foo", vec![2; 50]).await.unwrap();
+            assert_eq!(cache.get("foo").await.unwrap(), vec![2; 50]);
+            assert_eq!(cache.strategy().current_byte_count, 50);
+            assert_eq!(cache.strategy().current_entry_count, 1);
+            cache.put("foo", vec![5; 75]).await.unwrap();
+            assert_eq!(cache.strategy().current_byte_count, 75);
+            cache.put("foo", vec![2; 50]).await.unwrap();
+            cache.put("bar", vec![3; 50]).await.unwrap();
+            assert!(cache.put("foo", vec![4; 51]).await.is_err());
+            assert_eq!(cache.get("foo").await.unwrap(), vec![2; 50]);
+            assert_eq!(cache.strategy().current_byte_count, 100);
+            assert_eq!(cache.strategy().current_entry_count, 2);
+        }
+
+        async fn test_failed_disk_write_keeps_previous_entry() {
+            let temp_dir = TempDir::new();
+            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None), NO_COMPRESSION).await.unwrap();
+            cache.put("foo", b"old".to_vec()).await.unwrap();
+            fs::create_dir(cache_path(temp_dir.as_ref(), "foo").with_extension("tmp")).unwrap();
+
+            assert!(cache.put("foo", b"new".to_vec()).await.is_err());
+            assert_eq!(cache.get("foo").await.unwrap(), b"old".as_slice());
+            assert_eq!(cache.strategy().current_byte_count, 3);
+            assert_eq!(cache.strategy().current_entry_count, 1);
+        }
+
+        async fn test_recovery_ignores_old_formats() {
+            crate::strategies::recovery_tests::ignores_old_formats(
+                |path| Disk::new(path, None, Some(1)),
+                |disk| (disk.current_byte_count, disk.current_entry_count),
+            ).await;
+        }
+
+        async fn test_interrupted_write_recovery() {
+            crate::strategies::recovery_tests::interrupted(
+                |path| Disk::new(path, None, None),
+                |disk| (disk.current_byte_count, disk.current_entry_count),
+            ).await;
         }
     }
 }
