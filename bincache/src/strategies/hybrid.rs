@@ -165,26 +165,22 @@ impl CacheStrategy for Hybrid {
         Ok(())
     }
 
-    async fn take(&mut self, entry: Entry) -> Result<Vec<u8>> {
-        match entry {
-            Entry::Memory(memory) => {
-                self.memory_limits.remove(memory.data.len());
-                Ok(memory.data)
-            }
-            Entry::Disk(disk) => {
-                let data = disk.read().await?;
-                DiskUtil::delete(&disk.path).await?;
-                self.disk_limits.remove(disk.byte_len);
-                Ok(data)
-            }
+    async fn take(&mut self, entry: &mut Entry) -> Result<Vec<u8>> {
+        if let Entry::Memory(memory) = entry {
+            self.memory_limits.remove(memory.data.len());
+            return Ok(std::mem::take(&mut memory.data));
         }
+        let data = self.get(entry).await?.into_owned();
+        self.delete(entry).await?;
+        Ok(data)
     }
 
-    async fn delete(&mut self, entry: Entry) -> Result<()> {
-        if let Entry::Disk(disk) = &entry {
-            DiskUtil::delete(&disk.path).await?;
+    async fn delete(&mut self, entry: &mut Entry) -> Result<()> {
+        match entry {
+            Entry::Memory(_) => {}
+            Entry::Disk(disk) => DiskUtil::delete(&disk.path).await?,
         }
-        self.limits(&entry).remove(entry.len());
+        self.limits(entry).remove(entry.len());
         Ok(())
     }
 
@@ -216,19 +212,19 @@ impl RecoverableStrategy for Hybrid {
 
 #[async_trait]
 impl FlushableStrategy for Hybrid {
-    async fn flush<K>(&mut self, key: &K, entry: &Entry) -> Result<Option<Entry>>
+    async fn flush<K>(&mut self, key: &K, entry: &mut Entry) -> Result<bool>
     where
         K: CacheKey + Sync + Send,
     {
         let Entry::Memory(memory) = entry else {
-            return Ok(None);
+            return Ok(false);
         };
         self.disk_limits
             .check(memory.data.len(), None, LIMIT_KINDS)?;
         let disk = DiskEntry::new(&self.cache_dir, &key.to_key(), memory.data.len());
         disk.write(&memory.data).await?;
-        self.disk_limits.add(disk.byte_len);
-        Ok(Some(Entry::Disk(disk)))
+        self.replace_entry(entry, Entry::Disk(disk));
+        Ok(true)
     }
 }
 

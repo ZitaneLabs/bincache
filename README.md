@@ -77,6 +77,13 @@ Bincache supports multiple async runtimes:
 Custom strategies must implement `CacheStrategy::replace`. Disk recovery only
 reads `.bincache-v1/`. Older cache formats are ignored and must be repopulated.
 
+`CacheStrategy::take` and `delete` now borrow mutable entries. The cache removes
+the entry only after success, preserving it on I/O failure or cancellation.
+
+`FlushableStrategy::flush` now takes a mutable entry and returns whether it was
+flushed. Implementations must update that entry and its accounting together.
+Completed entries remain flushed if a later entry fails or flushing is canceled.
+
 ## Library Features
 
 - `blocking` - Enables blocking stdlib I/O

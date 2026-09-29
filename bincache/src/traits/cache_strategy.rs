@@ -45,10 +45,13 @@ pub trait CacheStrategy {
     async fn get<'a>(&self, entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>>;
 
     /// Take a value from the cache, removing it.
-    async fn take(&mut self, entry: Self::CacheEntry) -> Result<Vec<u8>>;
+    /// Keep the entry and accounting valid on failure. The
+    /// cache removes the entry only after this operation succeeds.
+    async fn take(&mut self, entry: &mut Self::CacheEntry) -> Result<Vec<u8>>;
 
     /// Delete a value from the cache.
-    async fn delete(&mut self, entry: Self::CacheEntry) -> Result<()>;
+    /// Like `take`, commit entry/accounting changes only on success.
+    async fn delete(&mut self, entry: &mut Self::CacheEntry) -> Result<()>;
 
     /// Get cache capacity. Returns None if no limit was set.
     fn get_cache_capacity(&self) -> Option<CacheCapacity>;

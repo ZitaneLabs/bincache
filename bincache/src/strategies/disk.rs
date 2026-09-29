@@ -226,14 +226,14 @@ impl CacheStrategy for Disk {
         Ok(())
     }
 
-    async fn take(&mut self, entry: Self::CacheEntry) -> Result<Vec<u8>> {
-        let data = self.get(&entry).await?.into_owned();
+    async fn take(&mut self, entry: &mut Self::CacheEntry) -> Result<Vec<u8>> {
+        let data = self.get(entry).await?.into_owned();
         self.delete(entry).await?;
 
         Ok(data)
     }
 
-    async fn delete(&mut self, entry: Self::CacheEntry) -> Result<()> {
+    async fn delete(&mut self, entry: &mut Self::CacheEntry) -> Result<()> {
         DiskUtil::delete(&entry.path).await?;
 
         self.limits.remove(entry.byte_len);
@@ -390,6 +390,9 @@ mod tests {
             fs::write(&directory, b"cannot stage inside a file").unwrap();
 
             assert!(cache.put("foo", b"new".to_vec()).await.is_err());
+            assert!(cache.take("foo").await.is_err());
+            assert!(cache.delete("foo").await.is_err());
+            assert!(cache.exists("foo"));
             fs::remove_file(&directory).unwrap();
             fs::rename(&saved, &directory).unwrap();
             assert_eq!(cache.get("foo").await.unwrap(), b"old".as_slice());

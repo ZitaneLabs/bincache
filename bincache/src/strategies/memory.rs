@@ -75,13 +75,13 @@ impl CacheStrategy for Memory {
         Ok(())
     }
 
-    async fn take(&mut self, entry: Self::CacheEntry) -> Result<Vec<u8>> {
+    async fn take(&mut self, entry: &mut Self::CacheEntry) -> Result<Vec<u8>> {
         self.limits.remove(entry.data.len());
 
-        Ok(entry.data)
+        Ok(std::mem::take(&mut entry.data))
     }
 
-    async fn delete(&mut self, entry: Self::CacheEntry) -> Result<()> {
+    async fn delete(&mut self, entry: &mut Self::CacheEntry) -> Result<()> {
         Ok(_ = self.take(entry).await?)
     }
 

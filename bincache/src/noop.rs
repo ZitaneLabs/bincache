@@ -37,11 +37,11 @@ impl CacheStrategy for Noop {
         Ok(())
     }
 
-    async fn take(&mut self, _entry: Self::CacheEntry) -> Result<Vec<u8>> {
+    async fn take(&mut self, _entry: &mut Self::CacheEntry) -> Result<Vec<u8>> {
         Ok(vec![])
     }
 
-    async fn delete(&mut self, _entry: Self::CacheEntry) -> Result<()> {
+    async fn delete(&mut self, _entry: &mut Self::CacheEntry) -> Result<()> {
         Ok(())
     }
 
