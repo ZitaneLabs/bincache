@@ -1,6 +1,6 @@
 [package]
 name = "bincache"
-version = "0.5.1"
+version = "0.6.0"
 edition = "2024"
 description = "ZitaneLabs binary cache."
 authors.workspace = true
@@ -23,6 +23,7 @@ comp_gzip = ["async-compression/gzip"]
 thiserror = "2.0.20"
 async-trait = "0.1.92"
 async-compression = "0.4.43"
+blake3 = "1.8.2"
 
 [dependencies.tokio]
 version = "1.53.1"
