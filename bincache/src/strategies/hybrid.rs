@@ -6,7 +6,8 @@ use std::{
 
 use super::{
     Limits,
-    disk::{FORMAT_DIR, recover_entries},
+    disk::{FORMAT_DIR, cache_path, recover_entries},
+    writes::Writes,
 };
 use crate::{
     CacheCapacity, DiskUtil, Result,
@@ -21,6 +22,8 @@ const LIMIT_KINDS: [&str; 2] = [LIMIT_KIND_BYTE_DISK, LIMIT_KIND_ENTRY_DISK];
 #[derive(Debug)]
 pub struct MemoryEntry {
     data: Vec<u8>,
+    // A canceled write must be rolled back before this entry is removed.
+    write_path: Option<PathBuf>,
 }
 
 /// A cache entry stored on disk.
@@ -45,8 +48,11 @@ impl Entry {
 /// Hybrid cache strategy.
 ///
 /// Stores entries in memory, falling back to disk when memory limits are reached.
+/// Canceled disk changes are rolled back before the next access to that path;
+/// the previous entry and accounting remain authoritative until acknowledgement.
 #[derive(Debug)]
 pub struct Hybrid {
+    writes: Writes,
     cache_dir: PathBuf,
     memory_limits: Limits,
     disk_limits: Limits,
@@ -65,6 +71,7 @@ impl Hybrid {
         disk_limits: Limits,
     ) -> Self {
         Self {
+            writes: Writes::default(),
             cache_dir: cache_dir.into().into_owned(),
             memory_limits,
             disk_limits,
@@ -82,6 +89,17 @@ impl Hybrid {
         self.limits(entry).remove(entry.len());
         self.limits(&replacement).add(replacement.len());
         *entry = replacement;
+    }
+
+    async fn settle(&self, entry: &Entry) -> Result<()> {
+        let path = match entry {
+            Entry::Memory(entry) => entry.write_path.as_deref(),
+            Entry::Disk(entry) => Some(entry.path.as_path()),
+        };
+        if let Some(path) = path {
+            self.writes.settle(path).await?;
+        }
+        Ok(())
     }
 }
 
@@ -106,11 +124,18 @@ impl CacheStrategy for Hybrid {
         {
             Entry::Memory(MemoryEntry {
                 data: value.into_owned(),
+                // A prior canceled insert may still own this disk path.
+                write_path: if self.writes.has_pending() {
+                    self.writes
+                        .pending_path(cache_path(&self.cache_dir, &key.to_key()))
+                } else {
+                    None
+                },
             })
         } else {
             self.disk_limits.check(value.len(), None, LIMIT_KINDS)?;
             let entry = DiskEntry::new(&self.cache_dir, &key.to_key(), value.len());
-            entry.write(&value).await?;
+            entry.write(&self.writes, &value).await?;
             Entry::Disk(entry)
         };
         self.limits(&entry).add(entry.len());
@@ -118,6 +143,7 @@ impl CacheStrategy for Hybrid {
     }
 
     async fn get<'a>(&self, entry: &'a Entry) -> Result<Cow<'a, [u8]>> {
+        self.settle(entry).await?;
         match entry {
             Entry::Memory(entry) => Ok(Cow::Borrowed(&entry.data)),
             Entry::Disk(entry) => Ok(Cow::Owned(entry.read().await?)),
@@ -136,26 +162,32 @@ impl CacheStrategy for Hybrid {
             .check(value.len(), old_memory, LIMIT_KINDS)
             .is_ok()
         {
-            if let Entry::Disk(old) = entry {
-                DiskUtil::delete(&old.path).await?;
-            }
+            let write_path = match entry {
+                Entry::Memory(old) => old.write_path.clone(),
+                Entry::Disk(old) => {
+                    self.writes.delete(&old.path).await?;
+                    None
+                }
+            };
             self.replace_entry(
                 entry,
                 Entry::Memory(MemoryEntry {
                     data: value.into_owned(),
+                    write_path,
                 }),
             );
         } else {
             let old_disk = matches!(entry, Entry::Disk(_)).then(|| entry.len());
             self.disk_limits.check(value.len(), old_disk, LIMIT_KINDS)?;
             match entry {
-                Entry::Memory(_) => {
+                Entry::Memory(old) => {
                     let disk = DiskEntry::new(&self.cache_dir, &key.to_key(), value.len());
-                    disk.write(&value).await?;
+                    old.write_path = Some(disk.path.clone());
+                    disk.write(&self.writes, &value).await?;
                     self.replace_entry(entry, Entry::Disk(disk));
                 }
                 Entry::Disk(old) => {
-                    old.write(&value).await?;
+                    old.write(&self.writes, &value).await?;
                     self.disk_limits.current_byte_count =
                         self.disk_limits.current_byte_count - old.byte_len + value.len();
                     old.byte_len = value.len();
@@ -166,6 +198,7 @@ impl CacheStrategy for Hybrid {
     }
 
     async fn take(&mut self, entry: &mut Entry) -> Result<Vec<u8>> {
+        self.settle(entry).await?;
         if let Entry::Memory(memory) = entry {
             self.memory_limits.remove(memory.data.len());
             return Ok(std::mem::take(&mut memory.data));
@@ -177,8 +210,8 @@ impl CacheStrategy for Hybrid {
 
     async fn delete(&mut self, entry: &mut Entry) -> Result<()> {
         match entry {
-            Entry::Memory(_) => {}
-            Entry::Disk(disk) => DiskUtil::delete(&disk.path).await?,
+            Entry::Memory(_) => self.settle(entry).await?,
+            Entry::Disk(disk) => self.writes.delete(&disk.path).await?,
         }
         self.limits(entry).remove(entry.len());
         Ok(())
@@ -199,6 +232,7 @@ impl RecoverableStrategy for Hybrid {
         K: Send,
         F: Fn(&str) -> Option<K> + Send,
     {
+        self.writes.settle_all().await?;
         let entries = recover_entries(&self.cache_dir, recover_key).await?;
         for (_, entry) in &entries {
             self.disk_limits.add(entry.byte_len);
@@ -222,11 +256,16 @@ impl FlushableStrategy for Hybrid {
         self.disk_limits
             .check(memory.data.len(), None, LIMIT_KINDS)?;
         let disk = DiskEntry::new(&self.cache_dir, &key.to_key(), memory.data.len());
-        disk.write(&memory.data).await?;
+        memory.write_path = Some(disk.path.clone());
+        disk.write(&self.writes, &memory.data).await?;
         self.replace_entry(entry, Entry::Disk(disk));
         Ok(true)
     }
 }
+
+#[cfg(all(test, feature = "rt_tokio_1"))]
+#[path = "hybrid/cancellation_tests.rs"]
+mod cancellation_tests;
 
 #[cfg(test)]
 mod tests {
@@ -373,9 +412,11 @@ mod tests {
             fs::rename(&backup, &path).unwrap();
             assert_eq!(cache.get("b").await.unwrap(), b"old".as_slice());
 
+            crate::utils::test::IO_FAILURES.lock().unwrap().push((path.clone(), std::io::ErrorKind::StorageFull));
             cache.put("b", b"new value".to_vec()).await.unwrap();
             assert_eq!(cache.get("b").await.unwrap(), b"new value".as_slice());
             assert!(!path.exists());
+            crate::utils::test::IO_FAILURES.lock().unwrap().retain(|(p, _)| p != &path);
             assert_eq!(cache.strategy().memory_limits.current_byte_count, 9);
             assert_eq!(cache.strategy().memory_limits.current_entry_count, 1);
             assert_eq!(cache.strategy().disk_limits.current_byte_count, 0);

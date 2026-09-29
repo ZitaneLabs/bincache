@@ -45,7 +45,7 @@ pub trait CacheStrategy {
     async fn get<'a>(&self, entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>>;
 
     /// Take a value from the cache, removing it.
-    /// Keep the entry and accounting valid on failure. The
+    /// Keep the entry and accounting valid on failure or cancellation. The
     /// cache removes the entry only after this operation succeeds.
     async fn take(&mut self, entry: &mut Self::CacheEntry) -> Result<Vec<u8>>;
 

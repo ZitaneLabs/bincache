@@ -5,6 +5,7 @@ mod memory;
 mod recovery_tests;
 #[cfg(test)]
 mod test_helpers;
+mod writes;
 
 pub use disk::Disk;
 pub use hybrid::Hybrid;

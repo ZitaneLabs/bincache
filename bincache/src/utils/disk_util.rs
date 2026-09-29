@@ -97,6 +97,49 @@ pub async fn rename(from: &Path, to: &Path) -> Result<()> {
     Ok(file_io!(fs::rename(from, to))?)
 }
 
+/// Unlike a general rename, a cache deletion must never move a directory.
+pub async fn rename_file(from: &Path, to: &Path) -> Result<()> {
+    if !file_io!(fs::symlink_metadata(from))?.is_file() {
+        return Err(std::io::Error::from(std::io::ErrorKind::InvalidInput).into());
+    }
+    rename(from, to).await
+}
+
+pub async fn copy(from: &Path, to: &Path) -> Result<()> {
+    #[cfg(test)]
+    crate::utils::test::check_io(from, std::io::ErrorKind::StorageFull)?;
+    file_io!(fs::copy(from, to))?;
+    Ok(())
+}
+
+/// Best-effort cleanup of a unique, non-authoritative transaction backup.
+pub fn cleanup(path: PathBuf) {
+    #[cfg(any(
+        feature = "blocking",
+        all(
+            feature = "implicit-blocking",
+            not(any(feature = "rt_tokio_1", feature = "rt_async-std_1"))
+        )
+    ))]
+    {
+        _ = std::fs::remove_file(path);
+    }
+    #[cfg(feature = "rt_tokio_1")]
+    {
+        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+            runtime.spawn(async move {
+                _ = delete(path).await;
+            });
+        }
+    }
+    #[cfg(feature = "rt_async-std_1")]
+    {
+        async_std::task::spawn(async move {
+            _ = delete(path).await;
+        });
+    }
+}
+
 /// List regular files without following symlinks; skip unreadable entries.
 pub async fn files(path: &Path) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();

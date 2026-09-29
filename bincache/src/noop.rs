@@ -64,15 +64,7 @@ impl CompressionStrategy for Noop {
 #[cfg(test)]
 mod tests {
     use super::Noop;
-    use crate::{CompressionStrategy, async_test};
-
-    fn create_arb_data(range: usize) -> Vec<u8> {
-        let mut vec = Vec::with_capacity(range);
-        for i in 0..range {
-            vec.push((i % 255) as u8);
-        }
-        vec
-    }
+    use crate::{CompressionStrategy, async_test, utils::test::create_arb_data};
 
     async_test! {
         async fn test_compression() {

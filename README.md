@@ -84,6 +84,12 @@ the entry only after success, preserving it on I/O failure or cancellation.
 flushed. Implementations must update that entry and its accounting together.
 Completed entries remain flushed if a later entry fails or flushing is canceled.
 
+Disk changes retain a transaction until acknowledgement. Canceled writes and removals are
+rolled back before the next access to their path; unrelated paths remain usable.
+Staging borrows the payload; transactions own only paths. Changing a disk record
+temporarily copies the old file for rollback. A failed
+rollback is reported on access and retried later. Crash recovery remains best effort.
+
 ## Library Features
 
 - `blocking` - Enables blocking stdlib I/O

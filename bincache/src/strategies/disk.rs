@@ -1,4 +1,5 @@
 use super::Limits;
+use super::writes::Writes;
 use async_trait::async_trait;
 
 use std::{
@@ -85,22 +86,8 @@ impl Entry {
         file.read(u64::MAX, Some(self.byte_len)).await
     }
 
-    pub(super) async fn write(&self, value: &[u8]) -> Result<()> {
-        let temporary = self.path.with_extension("tmp");
-        let key_len = (self.key.len() as u64).to_le_bytes();
-        let result = async {
-            DiskUtil::write_parts(
-                &temporary,
-                &[b"BINCACHE", &key_len, self.key.as_bytes(), value],
-            )
-            .await?;
-            DiskUtil::rename(&temporary, &self.path).await
-        }
-        .await;
-        if result.is_err() {
-            _ = DiskUtil::delete(&temporary).await;
-        }
-        result
+    pub(super) async fn write(&self, writes: &Writes, value: &[u8]) -> Result<()> {
+        writes.write(&self.path, &self.key, value).await
     }
 }
 
@@ -145,6 +132,7 @@ where
 /// number of bytes and/or entries that can be stored.
 #[derive(Debug)]
 pub struct Disk {
+    writes: Writes,
     /// The directory where entries are stored.
     cache_dir: PathBuf,
     limits: Limits,
@@ -160,16 +148,14 @@ impl Disk {
         Self {
             cache_dir: cache_dir.into().into_owned(),
             limits: Limits::new(byte_limit, entry_limit),
+            writes: Writes::default(),
         }
     }
 }
 
 impl Default for Disk {
     fn default() -> Self {
-        Self {
-            cache_dir: PathBuf::from("cache"),
-            limits: Limits::default(),
-        }
+        Self::new(Path::new("cache"), None, None)
     }
 }
 
@@ -195,7 +181,7 @@ impl CacheStrategy for Disk {
         // Write to disk
         let key = key.to_key();
         let entry = Entry::new(&self.cache_dir, &key, byte_len);
-        entry.write(value.as_ref()).await?;
+        entry.write(&self.writes, value.as_ref()).await?;
 
         self.limits.add(byte_len);
 
@@ -203,6 +189,7 @@ impl CacheStrategy for Disk {
     }
 
     async fn get<'a>(&self, entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>> {
+        self.writes.settle(&entry.path).await?;
         Ok(Cow::Owned(entry.read().await?))
     }
 
@@ -220,7 +207,7 @@ impl CacheStrategy for Disk {
         let byte_len = value.len();
         let new_total = self.limits.replacement_size(byte_len, entry.byte_len)?;
 
-        entry.write(&value).await?;
+        entry.write(&self.writes, &value).await?;
         entry.byte_len = byte_len;
         self.limits.current_byte_count = new_total;
         Ok(())
@@ -234,7 +221,7 @@ impl CacheStrategy for Disk {
     }
 
     async fn delete(&mut self, entry: &mut Self::CacheEntry) -> Result<()> {
-        DiskUtil::delete(&entry.path).await?;
+        self.writes.delete(&entry.path).await?;
 
         self.limits.remove(entry.byte_len);
 
@@ -253,6 +240,7 @@ impl RecoverableStrategy for Disk {
         K: Send,
         F: Fn(&str) -> Option<K> + Send,
     {
+        self.writes.settle_all().await?;
         let entries = recover_entries(&self.cache_dir, recover_key).await?;
         for (_, entry) in &entries {
             self.limits.add(entry.byte_len);
@@ -263,11 +251,53 @@ impl RecoverableStrategy for Disk {
 
 #[cfg(test)]
 mod tests {
-    use crate::strategies::test_helpers;
     use std::fs;
 
+    #[cfg(feature = "rt_tokio_1")]
+    use super::cache_path;
     use super::{Disk, Entry, FORMAT_DIR, LIMIT_KIND_BYTE, LIMIT_KIND_ENTRY, encode_entry};
-    use crate::{Cache, NO_COMPRESSION, async_test, utils::test::TempDir};
+    use crate::{async_test, utils::test::TempDir};
+
+    #[cfg(feature = "rt_tokio_1")]
+    #[tokio::test]
+    async fn test_canceled_write_commit() {
+        crate::strategies::recovery_tests::canceled_write(
+            |path| Disk::new(path, Some(100), None),
+            |disk| disk.writes.pause_commit(0),
+        )
+        .await;
+    }
+
+    #[cfg(feature = "rt_tokio_1")]
+    #[tokio::test]
+    async fn test_failed_write_rollback_is_retryable() {
+        let dir = TempDir::new();
+        let mut cache = new_cache(Disk::new(dir.as_ref(), Some(20), None)).await;
+        cache.put("foo", b"old".to_vec()).await.unwrap();
+        let gate = cache.strategy().writes.pause_commit(0);
+        let mut replacement = Box::pin(cache.put("foo", b"new value".to_vec()));
+        tokio::select! {
+            result = &mut replacement => panic!("unexpected completion: {result:?}"),
+            _ = gate.reached.notified() => {},
+        }
+        drop(replacement);
+        let path = cache_path(dir.as_ref(), "foo");
+        fs::remove_file(&path).unwrap();
+        fs::create_dir(&path).unwrap();
+        gate.resume.notify_one();
+        assert!(cache.get("foo").await.is_err());
+        assert_eq!(cache.capacity().unwrap().used(), 3);
+        // Failed rollback keeps its backup and can retry without repeating the
+        // write or publishing its replacement bytes to readers.
+        fs::remove_dir(&path).unwrap();
+        assert_eq!(cache.get("foo").await.unwrap(), b"old".as_slice());
+        cache.put("foo", b"retry".to_vec()).await.unwrap();
+        assert_eq!(cache.capacity().unwrap().used(), 5);
+        assert_eq!(cache.take("foo").await.unwrap(), b"retry");
+        assert_eq!(cache.capacity().unwrap().used(), 0);
+    }
+
+    use crate::strategies::test_helpers::{self, new_cache};
 
     async_test! {
         async fn test_read_preallocates_only_payload() {
@@ -276,7 +306,7 @@ mod tests {
             let value = vec![0xa5; 100];
             let mut entry = Entry::new(dir.as_ref(), &key, value.len());
             crate::DiskUtil::create_dir(dir.as_ref().join(FORMAT_DIR)).await.unwrap();
-            entry.write(&value).await.unwrap();
+            entry.write(&super::Writes::default(), &value).await.unwrap();
             // A hint larger than the payload demonstrates that the reader uses
             // byte_len, while a much larger key must not inflate that buffer.
             entry.byte_len = 4096;
@@ -310,7 +340,7 @@ mod tests {
             crate::CacheStrategy::setup(&mut disk).await.unwrap();
             for (key, value) in [("", Vec::new()), ("a/🔑\\key", vec![0xa5; 2 * 1024 * 1024])] {
                 let entry = Entry::new(dir.as_ref(), key, value.len());
-                entry.write(&value).await.unwrap();
+                entry.write(&super::Writes::default(), &value).await.unwrap();
                 assert_eq!(fs::read(&entry.path).unwrap(), encode_entry(key, &value));
                 assert_eq!(entry.read().await.unwrap(), value);
             }
@@ -354,7 +384,7 @@ mod tests {
             ];
 
             {
-                let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None), NO_COMPRESSION).await.unwrap();
+                let mut cache = new_cache(Disk::new(temp_dir.as_ref(), None, None)).await;
                 for (index, key) in keys.iter().enumerate() {
                     cache.put(key.clone(), vec![index as u8]).await.unwrap();
                 }
@@ -368,7 +398,7 @@ mod tests {
                 }));
             }
 
-            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None), NO_COMPRESSION).await.unwrap();
+            let mut cache = new_cache(Disk::new(temp_dir.as_ref(), None, None)).await;
             assert_eq!(cache.recover(|key| Some(key.to_owned())).await.unwrap(), keys.len());
             for (index, key) in keys.iter().enumerate() {
                 assert_eq!(cache.get(key.clone()).await.unwrap().as_ref(), &[index as u8]);
@@ -382,7 +412,7 @@ mod tests {
 
         async fn test_failed_disk_write_keeps_previous_entry() {
             let temp_dir = TempDir::new();
-            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None), NO_COMPRESSION).await.unwrap();
+            let mut cache = new_cache(Disk::new(temp_dir.as_ref(), None, None)).await;
             cache.put("foo", b"old".to_vec()).await.unwrap();
             let directory = temp_dir.as_ref().join(FORMAT_DIR);
             let saved = temp_dir.as_ref().join("saved");

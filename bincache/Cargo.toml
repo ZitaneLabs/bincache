@@ -11,8 +11,8 @@ readme.workspace = true
 
 [features]
 default = ["implicit-blocking"]
-implicit-blocking = ["dep:futures-util", "async-compression/futures-io"]
-blocking = ["dep:futures-util", "async-compression/futures-io"]
+implicit-blocking = ["async-compression/futures-io"]
+blocking = ["async-compression/futures-io"]
 rt_tokio_1 = ["dep:tokio", "async-compression/tokio"]
 rt_async-std_1 = ["dep:async-std", "async-compression/futures-io"]
 comp_zstd = ["async-compression/zstd"]
@@ -37,9 +37,8 @@ optional = true
 [dependencies.futures-util]
 version = "0.3.34"
 features = ["io"]
-optional = true
 
 [dev-dependencies]
 uuid = { version = "1.26.0", features = ["v4"] }
-tokio = { version = "1.53.1", features = ["rt", "rt-multi-thread", "macros"] }
+tokio = { version = "1.53.1", features = ["rt", "rt-multi-thread", "macros", "sync"] }
 async-std = { version = "1.13.2", features = ["attributes"] }

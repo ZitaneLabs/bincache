@@ -1,10 +1,18 @@
-use crate::{Cache, CacheStrategy, Error, NO_COMPRESSION, RecoverableStrategy};
+use crate::{Cache, CacheKey, CacheStrategy, Error, NO_COMPRESSION, Noop, RecoverableStrategy};
+
+pub(super) async fn new_cache<K, S>(strategy: S) -> Cache<K, S, Noop>
+where
+    K: CacheKey + Eq + std::hash::Hash + Sync + Send,
+    S: CacheStrategy + Send,
+{
+    Cache::new(strategy, NO_COMPRESSION).await.unwrap()
+}
 
 pub(super) async fn basic<S: CacheStrategy + Send>(
     strategy: S,
     counts: impl Fn(&S) -> (usize, usize),
 ) {
-    let mut cache = Cache::new(strategy, NO_COMPRESSION).await.unwrap();
+    let mut cache = new_cache(strategy).await;
     for (key, entries) in [("foo", 1), ("bar", 2)] {
         cache.put(key, key.as_bytes()).await.unwrap();
         assert_eq!(counts(cache.strategy()), (entries * 3, entries));
@@ -20,7 +28,7 @@ pub(super) async fn basic<S: CacheStrategy + Send>(
 }
 
 pub(super) async fn limit<S: CacheStrategy + Send>(strategy: S, expected: &str) {
-    let mut cache = Cache::new(strategy, NO_COMPRESSION).await.unwrap();
+    let mut cache = new_cache(strategy).await;
     for key in ["foo", "bar"] {
         cache.put(key, key.as_bytes()).await.unwrap();
     }
@@ -37,7 +45,7 @@ pub(super) async fn replacement<S: CacheStrategy + Send>(
     strategy: S,
     counts: impl Fn(&S) -> (usize, usize),
 ) {
-    let mut cache = Cache::new(strategy, NO_COMPRESSION).await.unwrap();
+    let mut cache = new_cache(strategy).await;
     for (value, size) in [(1, 100), (2, 50), (5, 75), (2, 50)] {
         cache.put("foo", vec![value; size]).await.unwrap();
         assert_eq!(cache.get("foo").await.unwrap(), vec![value; size]);
@@ -56,12 +64,12 @@ pub(super) async fn recovery<S: RecoverableStrategy + Send>(
     initial: &[&str],
     recovered: &[&str],
 ) {
-    let mut cache = Cache::new(strategy, NO_COMPRESSION).await.unwrap();
+    let mut cache = new_cache(strategy).await;
     for key in initial {
         cache.put(key.to_string(), key.as_bytes()).await.unwrap();
     }
     drop(cache);
-    let mut cache = Cache::new(restarted, NO_COMPRESSION).await.unwrap();
+    let mut cache = new_cache(restarted).await;
     assert_eq!(
         cache.recover(|key| Some(key.to_owned())).await.unwrap(),
         recovered.len()
