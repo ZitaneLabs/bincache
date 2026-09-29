@@ -45,6 +45,18 @@ impl Limits {
         })
     }
 
+    // Disk recovery may already exceed the entry limit. Replacing one entry
+    // does not add another, so the single-tier strategies check only bytes.
+    fn replacement_size(&self, size: usize, old_size: usize) -> Result<usize> {
+        let total = self.current_byte_count - old_size + size;
+        if self.byte_limit.is_some_and(|limit| total > limit) {
+            return Err(Error::LimitExceeded {
+                limit_kind: "Stored bytes".into(),
+            });
+        }
+        Ok(total)
+    }
+
     fn add(&mut self, size: usize) {
         self.current_byte_count += size;
         self.current_entry_count += 1;

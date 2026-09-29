@@ -7,6 +7,49 @@ use crate::{
 
 use super::disk::{FORMAT_DIR, cache_path, encode_entry};
 
+pub(super) async fn replaces_normalized_key<S: RecoverableStrategy + Send>(
+    strategy: impl Fn(&Path) -> S,
+    counts: impl Fn(&S) -> (usize, usize),
+) {
+    let dir = TempDir::new();
+    let mut cache = Cache::new(strategy(dir.as_ref()), NO_COMPRESSION)
+        .await
+        .unwrap();
+    cache.put("FOO".to_owned(), b"old".to_vec()).await.unwrap();
+    drop(cache);
+
+    let mut cache = Cache::new(strategy(dir.as_ref()), NO_COMPRESSION)
+        .await
+        .unwrap();
+    assert_eq!(
+        cache.recover(|key| Some(key.to_lowercase())).await.unwrap(),
+        1
+    );
+    cache
+        .put("foo".to_owned(), b"replacement".to_vec())
+        .await
+        .unwrap();
+    assert_eq!(
+        cache.get("foo".to_owned()).await.unwrap(),
+        b"replacement".as_slice()
+    );
+    assert_eq!(counts(cache.strategy()), (11, 1));
+    drop(cache);
+
+    let mut cache = Cache::new(strategy(dir.as_ref()), NO_COMPRESSION)
+        .await
+        .unwrap();
+    assert_eq!(
+        cache.recover(|key| Some(key.to_lowercase())).await.unwrap(),
+        1
+    );
+    assert_eq!(counts(cache.strategy()), (11, 1));
+    assert_eq!(cache.take("foo".to_owned()).await.unwrap(), b"replacement");
+    assert_eq!(counts(cache.strategy()), (0, 0));
+    assert!(!cache_path(dir.as_ref(), "FOO").exists());
+    assert!(!cache_path(dir.as_ref(), "foo").exists());
+}
+
 pub(super) async fn ignores_old_formats<S: RecoverableStrategy + Send>(
     strategy: impl Fn(&Path) -> S,
     counts: impl Fn(&S) -> (usize, usize),
@@ -38,7 +81,11 @@ pub(super) async fn ignores_old_formats<S: RecoverableStrategy + Send>(
 
     // Repopulating and replacing an old key creates only a v1 entry.
     cache.put("foo".to_owned(), b"new".to_vec()).await.unwrap();
-    let replacement = b"new";
+    let replacement = b"BINCACHE replacement";
+    cache
+        .put("foo".to_owned(), replacement.to_vec())
+        .await
+        .unwrap();
     assert_eq!(counts(cache.strategy()), (replacement.len(), 1));
     drop(cache);
 

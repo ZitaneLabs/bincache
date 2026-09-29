@@ -206,6 +206,26 @@ impl CacheStrategy for Disk {
         Ok(Cow::Owned(entry.read().await?))
     }
 
+    async fn replace<'a, K, V>(
+        &mut self,
+        _key: &K,
+        entry: &mut Self::CacheEntry,
+        value: V,
+    ) -> Result<()>
+    where
+        K: CacheKey + Sync + Send,
+        V: Into<Cow<'a, [u8]>> + Send,
+    {
+        let value = value.into();
+        let byte_len = value.len();
+        let new_total = self.limits.replacement_size(byte_len, entry.byte_len)?;
+
+        entry.write(&value).await?;
+        entry.byte_len = byte_len;
+        self.limits.current_byte_count = new_total;
+        Ok(())
+    }
+
     async fn take(&mut self, entry: Self::CacheEntry) -> Result<Vec<u8>> {
         let data = self.get(&entry).await?.into_owned();
         self.delete(entry).await?;
@@ -355,11 +375,34 @@ mod tests {
             }
         }
 
+        async fn test_replace_accounting_capacity_and_failure() {
+            let dir = TempDir::new();
+            test_helpers::replacement(Disk::new(dir.as_ref(), Some(100), None), |strategy| (strategy.limits.current_byte_count, strategy.limits.current_entry_count)).await;
+        }
 
+        async fn test_failed_disk_write_keeps_previous_entry() {
+            let temp_dir = TempDir::new();
+            let mut cache = Cache::new(Disk::new(temp_dir.as_ref(), None, None), NO_COMPRESSION).await.unwrap();
+            cache.put("foo", b"old".to_vec()).await.unwrap();
+            let directory = temp_dir.as_ref().join(FORMAT_DIR);
+            let saved = temp_dir.as_ref().join("saved");
+            fs::rename(&directory, &saved).unwrap();
+            fs::write(&directory, b"cannot stage inside a file").unwrap();
 
+            assert!(cache.put("foo", b"new".to_vec()).await.is_err());
+            fs::remove_file(&directory).unwrap();
+            fs::rename(&saved, &directory).unwrap();
+            assert_eq!(cache.get("foo").await.unwrap(), b"old".as_slice());
+            assert_eq!(cache.strategy().limits.current_byte_count, 3);
+            assert_eq!(cache.strategy().limits.current_entry_count, 1);
+        }
 
-
-
+        async fn test_replace_normalized_recovered_key() {
+            crate::strategies::recovery_tests::replaces_normalized_key(
+                |path| Disk::new(path, None, Some(1)),
+                |disk| (disk.limits.current_byte_count, disk.limits.current_entry_count),
+            ).await;
+        }
 
         async fn test_recovery_ignores_old_formats() {
             crate::strategies::recovery_tests::ignores_old_formats(

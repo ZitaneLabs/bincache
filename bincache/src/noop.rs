@@ -24,6 +24,19 @@ impl CacheStrategy for Noop {
         Ok(Cow::Borrowed(&[]))
     }
 
+    async fn replace<'a, K, V>(
+        &mut self,
+        _key: &K,
+        _entry: &mut Self::CacheEntry,
+        _value: V,
+    ) -> Result<()>
+    where
+        K: CacheKey + Sync + Send,
+        V: Into<Cow<'a, [u8]>> + Send,
+    {
+        Ok(())
+    }
+
     async fn take(&mut self, _entry: Self::CacheEntry) -> Result<Vec<u8>> {
         Ok(vec![])
     }

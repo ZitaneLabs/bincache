@@ -77,6 +77,12 @@ impl Hybrid {
             Entry::Disk(_) => &mut self.disk_limits,
         }
     }
+
+    fn replace_entry(&mut self, entry: &mut Entry, replacement: Entry) {
+        self.limits(entry).remove(entry.len());
+        self.limits(&replacement).add(replacement.len());
+        *entry = replacement;
+    }
 }
 
 #[async_trait]
@@ -116,6 +122,47 @@ impl CacheStrategy for Hybrid {
             Entry::Memory(entry) => Ok(Cow::Borrowed(&entry.data)),
             Entry::Disk(entry) => Ok(Cow::Owned(entry.read().await?)),
         }
+    }
+
+    async fn replace<'a, K, V>(&mut self, key: &K, entry: &mut Entry, value: V) -> Result<()>
+    where
+        K: CacheKey + Sync + Send,
+        V: Into<Cow<'a, [u8]>> + Send,
+    {
+        let value = value.into();
+        let old_memory = matches!(entry, Entry::Memory(_)).then(|| entry.len());
+        if self
+            .memory_limits
+            .check(value.len(), old_memory, LIMIT_KINDS)
+            .is_ok()
+        {
+            if let Entry::Disk(old) = entry {
+                DiskUtil::delete(&old.path).await?;
+            }
+            self.replace_entry(
+                entry,
+                Entry::Memory(MemoryEntry {
+                    data: value.into_owned(),
+                }),
+            );
+        } else {
+            let old_disk = matches!(entry, Entry::Disk(_)).then(|| entry.len());
+            self.disk_limits.check(value.len(), old_disk, LIMIT_KINDS)?;
+            match entry {
+                Entry::Memory(_) => {
+                    let disk = DiskEntry::new(&self.cache_dir, &key.to_key(), value.len());
+                    disk.write(&value).await?;
+                    self.replace_entry(entry, Entry::Disk(disk));
+                }
+                Entry::Disk(old) => {
+                    old.write(&value).await?;
+                    self.disk_limits.current_byte_count =
+                        self.disk_limits.current_byte_count - old.byte_len + value.len();
+                    old.byte_len = value.len();
+                }
+            }
+        }
+        Ok(())
     }
 
     async fn take(&mut self, entry: Entry) -> Result<Vec<u8>> {
@@ -292,13 +339,59 @@ mod tests {
             assert_eq!(fs::read_dir(temp_dir.as_ref().join(FORMAT_DIR)).unwrap().count(), 1);
         }
 
+        async fn test_replace_accounting_capacity_and_failure() {
+            let dir = TempDir::new();
+            test_helpers::replacement(Hybrid::new(dir.as_ref(), Limits::new(Some(100), None), Limits::new(Some(0), None)), memory_counts).await;
+        }
 
+        async fn test_replace_disk_backed_entry() {
+            let dir = TempDir::new();
+            test_helpers::replacement(
+                Hybrid::new(dir.as_ref(), Limits::new(Some(0), None), Limits::new(Some(100), None)),
+                |strategy| (strategy.disk_limits.current_byte_count, strategy.disk_limits.current_entry_count),
+            ).await;
+        }
 
+        async fn test_disk_to_memory_replacement_error_and_retry() {
+            let dir = TempDir::new();
+            let mut cache = Cache::new(Hybrid::new(
+                dir.as_ref(),
+                Limits::new(Some(10), Some(1)),
+                Limits::new(Some(10), Some(1)),
+            ), NO_COMPRESSION).await.unwrap();
+            cache.put("a", b"a".to_vec()).await.unwrap();
+            cache.put("b", b"old".to_vec()).await.unwrap();
+            cache.delete("a").await.unwrap();
 
+            // A directory at the file path forces deletion to return an error.
+            let path = cache_path(dir.as_ref(), "b");
+            let backup = path.with_extension("backup");
+            fs::rename(&path, &backup).unwrap();
+            fs::create_dir(&path).unwrap();
+            assert!(cache.put("b", b"new value".to_vec()).await.is_err());
+            assert_eq!(cache.strategy().memory_limits.current_byte_count, 0);
+            assert_eq!(cache.strategy().memory_limits.current_entry_count, 0);
+            assert_eq!(cache.strategy().disk_limits.current_byte_count, 3);
+            assert_eq!(cache.strategy().disk_limits.current_entry_count, 1);
+            fs::remove_dir(&path).unwrap();
+            fs::rename(&backup, &path).unwrap();
+            assert_eq!(cache.get("b").await.unwrap(), b"old".as_slice());
 
+            cache.put("b", b"new value".to_vec()).await.unwrap();
+            assert_eq!(cache.get("b").await.unwrap(), b"new value".as_slice());
+            assert!(!path.exists());
+            assert_eq!(cache.strategy().memory_limits.current_byte_count, 9);
+            assert_eq!(cache.strategy().memory_limits.current_entry_count, 1);
+            assert_eq!(cache.strategy().disk_limits.current_byte_count, 0);
+            assert_eq!(cache.strategy().disk_limits.current_entry_count, 0);
+        }
 
-
-
+        async fn test_replace_normalized_recovered_key() {
+            crate::strategies::recovery_tests::replaces_normalized_key(
+                |path| Hybrid::new(path, Limits::new(Some(0), Some(0)), Limits::new(None, Some(1))),
+                |hybrid| (hybrid.disk_limits.current_byte_count, hybrid.disk_limits.current_entry_count),
+            ).await;
+        }
 
         async fn test_recovery_ignores_old_formats() {
             crate::strategies::recovery_tests::ignores_old_formats(

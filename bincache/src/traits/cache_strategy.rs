@@ -23,6 +23,24 @@ pub trait CacheStrategy {
         K: CacheKey + Sync + Send,
         V: Into<Cow<'a, [u8]>> + Send;
 
+    /// Replace an existing entry without temporarily counting both values.
+    ///
+    /// On success, release the old resources and account only for the new value.
+    /// If this operation fails, `entry` and strategy accounting must remain
+    /// valid and unchanged. Capacity checks must credit the old entry's usage.
+    ///
+    /// This is required for custom strategies: `put` followed by `delete` is
+    /// not a safe general fallback when storage locations or limits overlap.
+    async fn replace<'a, K, V>(
+        &mut self,
+        key: &K,
+        entry: &mut Self::CacheEntry,
+        value: V,
+    ) -> Result<()>
+    where
+        K: CacheKey + Sync + Send,
+        V: Into<Cow<'a, [u8]>> + Send;
+
     /// Get a value from the cache.
     async fn get<'a>(&self, entry: &'a Self::CacheEntry) -> Result<Cow<'a, [u8]>>;
 
