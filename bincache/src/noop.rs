@@ -24,11 +24,24 @@ impl CacheStrategy for Noop {
         Ok(Cow::Borrowed(&[]))
     }
 
-    async fn take(&mut self, _entry: Self::CacheEntry) -> Result<Vec<u8>> {
+    async fn replace<'a, K, V>(
+        &mut self,
+        _key: &K,
+        _entry: &mut Self::CacheEntry,
+        _value: V,
+    ) -> Result<()>
+    where
+        K: CacheKey + Sync + Send,
+        V: Into<Cow<'a, [u8]>> + Send,
+    {
+        Ok(())
+    }
+
+    async fn take(&mut self, _entry: &mut Self::CacheEntry) -> Result<Vec<u8>> {
         Ok(vec![])
     }
 
-    async fn delete(&mut self, _entry: Self::CacheEntry) -> Result<()> {
+    async fn delete(&mut self, _entry: &mut Self::CacheEntry) -> Result<()> {
         Ok(())
     }
 
@@ -51,15 +64,7 @@ impl CompressionStrategy for Noop {
 #[cfg(test)]
 mod tests {
     use super::Noop;
-    use crate::{CompressionStrategy, async_test};
-
-    fn create_arb_data(range: usize) -> Vec<u8> {
-        let mut vec = Vec::with_capacity(range);
-        for i in 0..range {
-            vec.push((i % 255) as u8);
-        }
-        vec
-    }
+    use crate::{CompressionStrategy, async_test, utils::test::create_arb_data};
 
     async_test! {
         async fn test_compression() {

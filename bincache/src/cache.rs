@@ -38,11 +38,18 @@ where
     }
 
     /// Put an entry into the cache.
+    ///
+    /// An existing key is replaced through [`CacheStrategy::replace`]. If
+    /// compression or replacement fails, the previous entry remains available.
     pub async fn put<'a, V>(&mut self, key: K, value: V) -> Result<()>
     where
         V: Into<Cow<'a, [u8]>> + Send,
     {
         let value: Cow<'_, [u8]> = self.compressor.compress(value.into()).await?;
+
+        if let Some(entry) = self.data.get_mut(&key) {
+            return self.strategy.replace(&key, entry, value).await;
+        }
 
         let entry = self.strategy.put(&key, value).await?;
         self.data.insert(key, entry);
@@ -58,15 +65,18 @@ where
 
     /// Take an entry from the cache, removing it.
     pub async fn take(&mut self, key: K) -> Result<Vec<u8>> {
-        let entry = self.data.remove(&key).ok_or(crate::Error::KeyNotFound)?;
+        let entry = self.data.get_mut(&key).ok_or(crate::Error::KeyNotFound)?;
         let value = self.strategy.take(entry).await?;
+        self.data.remove(&key);
         Ok(self.compressor.decompress(value.into()).await?.into_owned())
     }
 
     /// Delete an entry from the cache.
     pub async fn delete(&mut self, key: K) -> Result<()> {
-        let entry = self.data.remove(&key).ok_or(crate::Error::KeyNotFound)?;
-        self.strategy.delete(entry).await
+        let entry = self.data.get_mut(&key).ok_or(crate::Error::KeyNotFound)?;
+        self.strategy.delete(entry).await?;
+        self.data.remove(&key);
+        Ok(())
     }
 
     /// Check if an entry exists.
@@ -119,7 +129,7 @@ where
 
 impl<K, S, C> Cache<K, S, C>
 where
-    K: CacheKey + Eq + Hash + ToOwned<Owned = K> + Sync + Send,
+    K: CacheKey + Eq + Hash + Sync + Send,
     S: FlushableStrategy,
     C: CompressionStrategy + Sync + Send,
 {
@@ -127,28 +137,8 @@ where
     /// Returns the number of flushed items.
     pub async fn flush(&mut self) -> Result<usize> {
         let mut flushed_item_count = 0;
-        let mut keys_to_remove = Vec::<K>::new();
-        let mut entries_to_insert = Vec::new();
-
-        // Flush all entries using the strategy
-        for (key, entry) in self.data.iter() {
-            let Some(new_entry) = self.strategy.flush(key, entry).await? else {
-                continue;
-            };
-            keys_to_remove.push(key.to_owned());
-            entries_to_insert.push((key.to_owned(), new_entry));
-            flushed_item_count += 1;
-        }
-
-        // Remove flushed entries from the cache
-        for key in keys_to_remove {
-            let entry = self.data.remove(&key).ok_or(crate::Error::KeyNotFound)?;
-            self.strategy.delete(entry).await?;
-        }
-
-        // Insert moved entries into the cache
-        for (key, entry) in entries_to_insert {
-            self.data.insert(key, entry);
+        for (key, entry) in &mut self.data {
+            flushed_item_count += usize::from(self.strategy.flush(key, entry).await?);
         }
 
         Ok(flushed_item_count)
